@@ -266,7 +266,7 @@ const announce = { textAlign: 'center', fontSize: 10, letterSpacing: '0.28em', t
 const heroWrap = { position: 'relative' };
 const heroBg = {
   position: 'relative', height: '88vh', minHeight: 560,
-  background: `linear-gradient(160deg, ${T.blush} 0%, ${T.paper} 100%)`,
+  backgroundImage: 'url(/images/si-pilates-princess-lifestyle.png)', backgroundSize: 'cover', backgroundPosition: 'center 30%',
   display: 'flex', alignItems: 'flex-end',
 };
 const heroScrim = {
