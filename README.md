@@ -21,6 +21,9 @@ Placeholder graphics stand in for real product photography — see
    | `QB_ENVIRONMENT` / `NEXT_PUBLIC_QB_ENVIRONMENT` | `sandbox` or `production` (keep both in sync) |
    | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Vercel KV / Upstash Redis store, used to persist the QuickBooks refresh token |
    | `NEXT_PUBLIC_BASE_URL` | your deployed URL, e.g. `https://smells-iconic.vercel.app` |
+   | `META_APP_ID` / `META_APP_SECRET` / `META_AD_ACCOUNT_ID` | *(optional)* Meta app + ad account, for Facebook Ads cost-cap auto-adjust — see `DEPLOYMENT.md` Step 1b |
+   | `META_TARGET_ROAS` / `META_MIN_COST_CAP_CENTS` / `META_MAX_COST_CAP_CENTS` | *(optional)* cost-cap auto-adjust guardrails — see `DEPLOYMENT.md` Step 1b |
+   | `CRON_SECRET` | *(optional)* random string; restricts the daily cost-cap cron job to Vercel's own scheduled calls |
 
 The site builds and renders fully without QuickBooks configured — only the
 final **Pay now** button on `/checkout` needs it. Once the variables above are
@@ -50,6 +53,11 @@ npm run dev
 - `lib/qbPayments.js` — client-side card tokenization (direct call to Intuit's Payments Tokens REST endpoint)
 - `lib/qbServerAuth.js` — server-side access token, refreshed automatically before every charge
 - `lib/qbTokenStore.js` — persists the QuickBooks token pair in a KV store between requests
+- `pages/api/meta-ads-auth/connect.js`, `pages/api/meta-ads-auth/callback.js` — one-time Facebook Ads OAuth authorization flow
+- `lib/metaMarketingApi.js` — reads COST_CAP ad set spend/revenue and updates bid caps via the Meta Marketing API
+- `lib/costCapBidding.js` — computes each ad set's bid-cap adjustment from its ROAS vs. target, with min/max/step guardrails
+- `pages/api/cron/ads-auto-adjust.js` — daily Vercel Cron job that runs the adjustment pass when auto-adjust is switched on
+- `pages/api/admin/ads/*` — admin endpoints backing the "Facebook Ads — cost cap bidding" panel (overview, manual run, on/off toggle)
 - `lib/products.js` — product data (edit scents/prices here)
 - `lib/theme.js` — design tokens (colors, fonts, shared styles)
 - `lib/useCart.js` — cart Context provider, persisted to `localStorage` so it survives navigating to `/checkout`

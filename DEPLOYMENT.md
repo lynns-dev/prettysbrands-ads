@@ -32,6 +32,54 @@ If charges still fail after both of the above are correct, the remaining possibi
 
 ---
 
+## Step 1b: Set Up Facebook Ads Cost-Cap Auto-Adjust (optional)
+
+This connects to a Meta (Facebook) ad account, reads each COST_CAP ad set's
+recent spend and Meta-attributed purchase revenue, and automatically nudges
+its bid cap toward your target ROAS — bounded by hard min/max guardrails so
+one bad signal can't move spend far in a single pass. Skip this whole section
+if you don't want automatic bid changes; the rest of the site works without it.
+
+1. Go to https://developers.facebook.com and create an app (type **Business**).
+2. Add the **Marketing API** product to the app, and under **App Review →
+   Permissions and Features**, request `ads_management` and `ads_read`. Apps
+   in development mode can use these immediately for admins/testers/developers
+   of the app — full public/agency use needs Meta's App Review.
+3. Under **Settings → Basic**, grab the **App ID** / **App Secret** →
+   `META_APP_ID` / `META_APP_SECRET`.
+4. Under **Facebook Login → Settings**, add a valid OAuth redirect URI:
+   `https://YOUR_DOMAIN/api/meta-ads-auth/callback`.
+5. Find the ad account ID you want to manage (Ads Manager → Account overview,
+   format `act_1234567890`) → `META_AD_ACCOUNT_ID`.
+6. Decide your bidding guardrails, in your ad account's currency **minor
+   units** (cents for USD):
+   - `META_TARGET_ROAS` — target revenue-per-ad-dollar, e.g. `3` for 3x.
+   - `META_MIN_COST_CAP_CENTS` / `META_MAX_COST_CAP_CENTS` — hard floor/ceiling
+     the auto-adjust will never move a cap outside of, regardless of signal.
+   - `META_MAX_ADJUSTMENT_PCT` (optional, default `20`) — max % a single run
+     can move any one ad set's cap.
+   - `META_MIN_SPEND_MULTIPLIER` (optional, default `10`) — an ad set is
+     skipped until it's spent at least this many times its current cap in the
+     lookback window, so a handful of early results can't swing the cap.
+   - `META_INSIGHTS_LOOKBACK_DAYS` (optional, default `7`).
+7. Visit `/api/meta-ads-auth/connect` once to authorize. Unlike QuickBooks,
+   this token can't silently refresh — it lasts ~60 days, and the admin panel
+   shows the expiry so you can re-authorize before it lapses.
+8. In `/admin`, the **Facebook Ads — cost cap bidding** panel shows every
+   active COST_CAP ad set's spend/revenue/ROAS and what the next pass would
+   do. **Auto-adjust is off by default** — flip it on there once you're happy
+   with the preview. A daily Vercel Cron job (`vercel.json`) then runs the
+   pass automatically; "Run adjustment now" in the panel runs it on demand
+   regardless of that switch. Set `CRON_SECRET` (any random string) so only
+   Vercel's own scheduled invocations can trigger it.
+
+Only ad sets already on Meta's `COST_CAP` bid strategy are touched — other
+bid strategies are left alone. Revenue comes from Meta's own Insights
+`action_values` for purchases, which already reflects the Purchase events this
+site sends via `lib/metaCapi.js` (Conversions API) — no extra wiring needed.
+
+---
+
 ## Step 2: Deploy to Vercel
 
 ### Option A: Quick Deploy (Recommended)
@@ -46,6 +94,7 @@ If charges still fail after both of the above are correct, the remaining possibi
    - `QB_ENVIRONMENT` and `NEXT_PUBLIC_QB_ENVIRONMENT`: both `sandbox` (or both `production` once approved — see Step 1)
    - `KV_REST_API_URL` / `KV_REST_API_TOKEN`: from a KV store (Vercel Storage → Marketplace → Upstash, or a standalone Upstash Redis database — same REST API either way)
    - `NEXT_PUBLIC_BASE_URL`: your Vercel domain (e.g., `https://smells-iconic.vercel.app`)
+   - (optional) `META_APP_ID` / `META_APP_SECRET` / `META_AD_ACCOUNT_ID` / `META_TARGET_ROAS` / `META_MIN_COST_CAP_CENTS` / `META_MAX_COST_CAP_CENTS` / `CRON_SECRET`: from Step 1b, for Facebook Ads cost-cap auto-adjust
 7. Redeploy by going to "Deployments" → last deployment → "Redeploy"
 8. Visit `/api/qb-auth/connect` once to authorize QuickBooks (see Step 1)
 

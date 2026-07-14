@@ -108,6 +108,11 @@ export default function AdminDashboard() {
   const [hoveredCountry, setHoveredCountry] = React.useState(null);
   const [orders, setOrders] = React.useState([]);
   const [ordersLoading, setOrdersLoading] = React.useState(true);
+  const [adsOverview, setAdsOverview] = React.useState(null);
+  const [adsLoading, setAdsLoading] = React.useState(true);
+  const [adsRunning, setAdsRunning] = React.useState(false);
+  const [adsRunMessage, setAdsRunMessage] = React.useState('');
+  const [adsToggling, setAdsToggling] = React.useState(false);
 
   React.useEffect(() => {
     fetch('/api/admin/orders')
@@ -196,10 +201,20 @@ export default function AdminDashboard() {
     fetch('/api/admin/discounts').then((r) => r.json()).then((data) => setDiscounts(data.discounts || [])).catch(() => {});
   }, []);
 
+  const loadAdsOverview = React.useCallback(() => {
+    setAdsLoading(true);
+    fetch('/api/admin/ads/overview')
+      .then((r) => r.json())
+      .then(setAdsOverview)
+      .catch(() => {})
+      .finally(() => setAdsLoading(false));
+  }, []);
+
   React.useEffect(() => {
     loadReviews();
     loadDiscounts();
-  }, [loadReviews, loadDiscounts]);
+    loadAdsOverview();
+  }, [loadReviews, loadDiscounts, loadAdsOverview]);
 
   // Covers both the initial load and refetching when the funnel time
   // filter changes.
@@ -336,6 +351,47 @@ export default function AdminDashboard() {
     });
     const data = await res.json();
     if (res.ok) setDiscounts(data.discounts);
+  };
+
+  const handleToggleAutoAdjust = async () => {
+    setAdsToggling(true);
+    try {
+      const res = await fetch('/api/admin/ads/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !adsOverview?.autoAdjustEnabled }),
+      });
+      const data = await res.json();
+      if (res.ok) setAdsOverview((prev) => ({ ...prev, autoAdjustEnabled: data.enabled }));
+    } finally {
+      setAdsToggling(false);
+    }
+  };
+
+  const handleRunAdsNow = async () => {
+    setAdsRunning(true);
+    setAdsRunMessage('');
+    try {
+      const res = await fetch('/api/admin/ads/auto-adjust', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setAdsRunMessage(data.error || 'Adjustment run failed.');
+      } else {
+        const applied = (data.applied || []).filter((a) => a.action === 'adjust');
+        const failed = (data.applied || []).filter((a) => a.action === 'failed');
+        setAdsRunMessage(
+          applied.length === 0 && failed.length === 0
+            ? 'Ran now — no ad set needed a change.'
+            : `Adjusted ${applied.length} ad set${applied.length === 1 ? '' : 's'}` +
+              (failed.length > 0 ? `, ${failed.length} failed.` : '.')
+        );
+      }
+    } catch (err) {
+      setAdsRunMessage(err.message || 'Adjustment run failed.');
+    } finally {
+      setAdsRunning(false);
+      loadAdsOverview();
+    }
   };
 
   const handleLogout = async () => {
@@ -740,6 +796,116 @@ export default function AdminDashboard() {
             <button type="submit" style={S.btnFill}>Add code</button>
           </form>
           {discountFormMessage && <p style={{ fontSize: 12, color: T.ink, marginTop: 12 }}>{discountFormMessage}</p>}
+        </Section>
+
+        {/* FACEBOOK ADS — COST CAP BIDDING */}
+        <Section
+          title="Facebook Ads — cost cap bidding"
+          action={
+            adsOverview?.connection?.connected ? (
+              <button onClick={handleRunAdsNow} disabled={adsRunning} style={{ ...S.btnOutline, opacity: adsRunning ? 0.6 : 1 }}>
+                {adsRunning ? 'Running…' : 'Run adjustment now'}
+              </button>
+            ) : null
+          }
+        >
+          {adsLoading ? (
+            <p style={{ color: T.soft, fontSize: 14 }}>Loading…</p>
+          ) : !adsOverview?.connection?.connected ? (
+            <div>
+              <p style={{ color: T.soft, fontSize: 14, marginBottom: 16 }}>
+                Not connected yet. This needs a Meta app (ads_management + ads_read) and
+                META_APP_ID / META_APP_SECRET / META_AD_ACCOUNT_ID set, plus META_TARGET_ROAS and
+                META_MIN_COST_CAP_CENTS / META_MAX_COST_CAP_CENTS guardrails — see README for setup.
+              </p>
+              <a href="/api/meta-ads-auth/connect" style={{ ...S.btnFill, display: 'inline-block', textDecoration: 'none' }}>
+                Connect Facebook Ads
+              </a>
+            </div>
+          ) : (
+            <>
+              {(() => {
+                const expiresInDays = Math.round((adsOverview.connection.expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
+                const soon = expiresInDays <= 7;
+                return (
+                  <p style={{ fontSize: 13, color: soon ? '#a13d2b' : T.soft, marginBottom: 16 }}>
+                    Connected · token expires in {expiresInDays} day{expiresInDays === 1 ? '' : 's'}
+                    {soon && ' — re-authorize soon via /api/meta-ads-auth/connect'}
+                  </p>
+                );
+              })()}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+                <span style={{ fontSize: 13 }}>
+                  Daily automatic adjustment: <strong>{adsOverview.autoAdjustEnabled ? 'ON' : 'OFF'}</strong>
+                </span>
+                <button onClick={handleToggleAutoAdjust} disabled={adsToggling} style={{ ...S.btnOutline, opacity: adsToggling ? 0.6 : 1 }}>
+                  {adsOverview.autoAdjustEnabled ? 'Turn off' : 'Turn on'}
+                </button>
+              </div>
+
+              {adsRunMessage && <p style={{ fontSize: 12, color: T.ink, marginBottom: 16 }}>{adsRunMessage}</p>}
+
+              {adsOverview.configError ? (
+                <p style={{ fontSize: 13, color: '#a13d2b', marginBottom: 20 }}>{adsOverview.configError}</p>
+              ) : adsOverview.preview && (
+                <div style={{ marginBottom: 24 }}>
+                  <p style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: T.soft, marginBottom: 10 }}>
+                    Cost-cap ad sets ({adsOverview.preview.results.length}) · target {adsOverview.preview.config.targetRoas}x ROAS · last {adsOverview.preview.config.lookbackDays}d
+                  </p>
+                  {adsOverview.preview.results.length === 0 ? (
+                    <p style={{ color: T.soft, fontSize: 14 }}>No active COST_CAP ad sets found.</p>
+                  ) : (
+                    <div>
+                      <div style={orderHeadRow}>
+                        <span style={{ flex: 1 }}>Ad set</span>
+                        <span style={{ flex: '0 0 90px' }}>Spend</span>
+                        <span style={{ flex: '0 0 90px' }}>Revenue</span>
+                        <span style={{ flex: '0 0 70px' }}>ROAS</span>
+                        <span style={{ flex: '0 0 160px' }}>Cap / action</span>
+                      </div>
+                      {adsOverview.preview.results.map((r) => (
+                        <div key={r.adSetId} style={orderRow}>
+                          <span style={{ flex: 1 }} title={r.reason}>{r.adSetName}</span>
+                          <span style={{ flex: '0 0 90px' }}>${(r.spend / 100).toFixed(2)}</span>
+                          <span style={{ flex: '0 0 90px' }}>${(r.revenue / 100).toFixed(2)}</span>
+                          <span style={{ flex: '0 0 70px' }}>{r.actualRoas.toFixed(2)}x</span>
+                          <span style={{ flex: '0 0 160px', color: r.action === 'adjust' ? T.ink : T.soft }}>
+                            {r.action === 'adjust'
+                              ? `$${(r.currentBidAmount / 100).toFixed(2)} → $${(r.newBidAmount / 100).toFixed(2)}`
+                              : `$${(r.currentBidAmount / 100).toFixed(2)} (${r.action})`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: T.soft, marginBottom: 10 }}>
+                Recent adjustments ({adsOverview.recentAdjustments.length})
+              </p>
+              {adsOverview.recentAdjustments.length === 0 ? (
+                <p style={{ color: T.soft, fontSize: 14 }}>No adjustments applied yet.</p>
+              ) : (
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  {adsOverview.recentAdjustments.map((a, i) => (
+                    <div key={`${a.adSetId}-${a.appliedAt}-${i}`} style={orderRow}>
+                      <span style={{ flex: '0 0 130px', color: T.soft }}>
+                        {new Date(a.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                      <span style={{ flex: 1 }}>{a.adSetName}</span>
+                      <span style={{ flex: '0 0 160px' }}>
+                        {a.action === 'failed'
+                          ? `Failed: ${a.reason}`
+                          : `$${(a.currentBidAmount / 100).toFixed(2)} → $${(a.newBidAmount / 100).toFixed(2)}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </Section>
       </div>
 
