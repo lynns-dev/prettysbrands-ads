@@ -39,6 +39,21 @@ the whole app sits behind a single admin login.
   the cap). When triggered, the ad set is deep-copied into a fresh one (new
   ad, same targeting/budget/cap) and the original is paused. **Off by
   default per brand.**
+- **Performance trends & recommendation** — on demand, Claude looks back
+  across a brand's `COST_CAP` ad sets day by day and finds what the
+  highest-ROAS, highest-spend days had in common: how many winning creatives
+  were live at once, cost-cap amount, and bid strategy — then writes one
+  actionable recommendation. Read-only, like winner detection; requires
+  `ANTHROPIC_API_KEY`.
+- **Live ad-spend ticker** — today's spend, polled every ~30s, shown as a
+  total across all brands on the dashboard and per-brand on each brand page.
+- **Pacing alerts (phone push)** — an hourly check compares each brand's
+  spend so far today against an expected daily budget (its monthly budget
+  split across the days in the month) and pushes a notification to any
+  opted-in device when it's tracking too fast or too slow, and again when it
+  recovers. Requires a brand to have a monthly budget set, and Web Push to be
+  configured (see below) and enabled from the dashboard's "Enable phone
+  notifications" button.
 
 ## Deploy to Vercel
 
@@ -54,8 +69,14 @@ the whole app sits behind a single admin login.
    | `NEXT_PUBLIC_BASE_URL` | your deployed URL, e.g. `https://prettysbrands-ads.vercel.app` |
    | `ADMIN_PASSWORD` | password for this app — there's no per-user login, just one shared operator password |
    | `META_APP_ID` / `META_APP_SECRET` | from a Meta app with the Marketing API product added — see "Facebook app setup" below |
-   | `CRON_SECRET` | any random string (e.g. `openssl rand -hex 16`) — restricts the daily auto-adjust cron job to Vercel's own scheduled calls |
-   | `ANTHROPIC_API_KEY` | *(optional)* powers the "Winner detection" panel — get one at console.anthropic.com |
+   | `CRON_SECRET` | any random string (e.g. `openssl rand -hex 16`) — restricts the daily auto-adjust and hourly pacing-check cron jobs to Vercel's own scheduled calls |
+   | `ANTHROPIC_API_KEY` | *(optional)* powers "Winner detection" and "Performance trends & recommendation" — get one at console.anthropic.com |
+   | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | *(optional)* powers phone push notifications for pacing alerts — generate with `npx web-push generate-vapid-keys`; set `VAPID_PUBLIC_KEY` and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` to the same public key value, keep the private key secret |
+
+   > **Vercel Cron plan note:** the Hobby plan only runs cron jobs once a day
+   > regardless of the schedule you set. The hourly pacing check
+   > (`vercel.json`'s `0 * * * *` entry) needs a Pro plan (or higher) to
+   > actually run hourly — on Hobby it'll just run once daily instead.
 
 4. Visit `/api/meta-auth/connect` once to authorize Facebook Ads.
 5. Sign in at `/login`, add a brand from the dashboard (name, ad account ID,
@@ -96,11 +117,16 @@ npm run dev
 - `pages/api/meta-auth/connect.js`, `pages/api/meta-auth/callback.js` — one-time, shared Facebook OAuth flow
 - `pages/api/brands/*` — brand CRUD, per-brand overview/auto-adjust/toggle endpoints
 - `pages/api/cron/ads-auto-adjust.js` — daily Vercel Cron job (see `vercel.json`), loops every brand with auto-adjust enabled
-- `lib/metaMarketingApi.js` — Meta Marketing API client: campaigns, ad sets, ads/creatives, Insights, bid updates, ad-set copy/status
+- `pages/api/cron/pacing-check.js` — hourly Vercel Cron job, checks every brand's daily pacing and pushes a phone notification on status changes
+- `pages/api/live-spend.js`, `components/LiveSpendTicker.jsx` — today's spend, polled every ~30s, Redis-cached briefly to survive multiple tabs
+- `pages/api/push/subscribe.js`, `lib/webPush.js`, `public/sw.js`, `components/NotificationOptIn.jsx` — Web Push opt-in, subscription storage, and sending
+- `lib/metaMarketingApi.js` — Meta Marketing API client: campaigns, ad sets, ads/creatives, Insights (including day-by-day time series), bid updates, ad-set copy/status
 - `lib/costCapBidding.js` — computes each ad set's bid-cap adjustment from its ROAS vs. a brand's target, with min/max/step guardrails
 - `lib/adFatigue.js` — detects single-ad `COST_CAP` ad sets whose cost per result has drifted over cap without spend dropping off, and deep-copies + pauses them; `lib/adRefreshStore.js` is its per-brand audit log
 - `lib/aiInsights.js` — Claude-powered winner detection over a brand's testing-pool ads (see `pages/api/brands/[id]/winners.js`)
+- `lib/trendAnalysis.js` — Claude-powered day-by-day trend analysis + recommendation over a brand's cost-cap ad sets (see `pages/api/brands/[id]/trends.js`)
 - `lib/budgetPacing.js` — month-to-date spend vs. a brand's monthly budget
+- `lib/pacingAlerts.js` — day-level pacing vs. an expected daily budget, with push-notification de-duping so alerts fire once per status change per day
 - `lib/brandsStore.js` — KV-backed brand configs (ad account, ROAS target, cost-cap bounds, budget, testing pattern, fatigue guardrails, auto-adjust/auto-refresh flags)
 - `lib/adSpendStore.js` — per-brand audit log of applied cost-cap adjustments
 - `lib/dateRange.js` — shared "last N days" helper
@@ -125,3 +151,12 @@ npm run dev
   over every active ad in the matched testing campaigns — it's a manual
   button, not part of the daily cron, precisely so it only runs (and costs
   tokens) when you ask for it.
+- **Trend analysis caveat:** the cap-amount/bid-strategy figures joined onto
+  each historical day come from each ad set's *current* settings — Meta's
+  Insights API doesn't expose a history of bid/cap changes. Fine as a proxy
+  when caps don't change often, but not literally what was set on that day
+  if it's been edited since.
+- **Phone notifications on iPhone:** iOS Safari only delivers Web Push to a
+  site that's been added to the Home Screen (Share → Add to Home Screen,
+  iOS 16.4+) and opened from there at least once — a plain browser tab won't
+  receive pushes. Android/desktop Chrome and Firefox work from a normal tab.

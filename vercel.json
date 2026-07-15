@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/ads-auto-adjust", "schedule": "0 13 * * *" }
+    { "path": "/api/cron/ads-auto-adjust", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/pacing-check", "schedule": "0 * * * *" }
   ]
 }

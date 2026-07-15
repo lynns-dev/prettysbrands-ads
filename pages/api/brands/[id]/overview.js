@@ -7,6 +7,7 @@ import { listCampaigns, listAdSets, listAds, getInsights } from '../../../../lib
 import { previewBrandAdjustments } from '../../../../lib/costCapBidding';
 import { previewBrandFatigue } from '../../../../lib/adFatigue';
 import { getBrandPacing } from '../../../../lib/budgetPacing';
+import { getBrandDailyPacing } from '../../../../lib/pacingAlerts';
 import { getAdjustmentLog } from '../../../../lib/adSpendStore';
 import { getRefreshLog } from '../../../../lib/adRefreshStore';
 import { getConnectionStatus } from '../../../../lib/metaAdsAuth';
@@ -23,7 +24,7 @@ async function handler(req, res) {
   if (!brand) return res.status(404).json({ error: 'Brand not found.' });
 
   const connection = await getConnectionStatus().catch(() => ({ connected: false }));
-  const empty = { brand, connection, campaigns: [], creatives: [], costCap: null, pacing: null, recentAdjustments: [], fatigue: null, recentRefreshes: [], error: null };
+  const empty = { brand, connection, campaigns: [], creatives: [], costCap: null, pacing: null, dailyPacing: null, recentAdjustments: [], fatigue: null, recentRefreshes: [], error: null };
   if (!connection.connected) return res.status(200).json(empty);
 
   try {
@@ -57,10 +58,11 @@ async function handler(req, res) {
       return { ...a, ...insight, roas: insight.spend > 0 ? insight.revenue / insight.spend : 0 };
     });
 
-    const [costCapResults, fatigueResults, pacing, recentAdjustments, recentRefreshes] = await Promise.all([
+    const [costCapResults, fatigueResults, pacing, dailyPacing, recentAdjustments, recentRefreshes] = await Promise.all([
       previewBrandAdjustments(brand),
       previewBrandFatigue(brand),
       getBrandPacing(brand),
+      getBrandDailyPacing(brand),
       getAdjustmentLog(brand.id, 20),
       getRefreshLog(brand.id, 20),
     ]);
@@ -69,7 +71,7 @@ async function handler(req, res) {
       brand, connection, campaigns, creatives,
       costCap: { results: costCapResults, lookbackDays: brand.lookbackDays, targetRoas: brand.targetRoas },
       fatigue: { results: fatigueResults },
-      pacing, recentAdjustments, recentRefreshes, error: null,
+      pacing, dailyPacing, recentAdjustments, recentRefreshes, error: null,
     });
   } catch (err) {
     return res.status(200).json({ ...empty, error: err.message });

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { T, S, badge, pastel } from '../../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../../lib/adminAuth';
+import LiveSpendTicker from '../../components/LiveSpendTicker';
 
 export async function getServerSideProps({ req }) {
   const valid = await verifySession(req.cookies?.[SESSION_COOKIE]).catch(() => false);
@@ -22,6 +23,7 @@ const PACING_LABEL = { over_pace: 'Over pace', under_pace: 'Under pace', on_pace
 const PACING_COLOR = { over_pace: T.warn, under_pace: T.accent, on_pace: T.soft };
 const FATIGUE_COLOR = { fatigued: T.warn, failed: T.warn, ok: T.accent, skipped: T.soft };
 const VERDICT_COLOR = { winner: T.accent, promising: T.ink, not_yet: T.soft, underperforming: T.warn };
+const CONFIDENCE_COLOR = { high: T.accent, medium: T.ink, low: T.soft };
 
 export default function BrandDetail() {
   const router = useRouter();
@@ -37,6 +39,10 @@ export default function BrandDetail() {
   const [winnerLoading, setWinnerLoading] = React.useState(false);
   const [winnerResult, setWinnerResult] = React.useState(null);
   const [winnerError, setWinnerError] = React.useState('');
+  const [trendsLoading, setTrendsLoading] = React.useState(false);
+  const [trendsResult, setTrendsResult] = React.useState(null);
+  const [trendsError, setTrendsError] = React.useState('');
+  const [showTrendDays, setShowTrendDays] = React.useState(false);
   const [fatigueRunning, setFatigueRunning] = React.useState(false);
   const [fatigueMessage, setFatigueMessage] = React.useState('');
   const [showCampaigns, setShowCampaigns] = React.useState(false);
@@ -130,6 +136,23 @@ export default function BrandDetail() {
     }
   };
 
+  const handleRunTrends = async () => {
+    setTrendsLoading(true);
+    setTrendsError('');
+    setTrendsResult(null);
+    try {
+      const res = await fetch(`/api/brands/${id}/trends`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setTrendsError(result.error || 'Analysis failed.');
+      } else {
+        setTrendsResult(result);
+      }
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSettingsError('');
@@ -162,7 +185,7 @@ export default function BrandDetail() {
     return <div style={{ maxWidth: 1000, margin: '0 auto', padding: 32 }}><p style={{ color: T.soft }}>Loading…</p></div>;
   }
 
-  const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, recentAdjustments, recentRefreshes, error } = data;
+  const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, dailyPacing, recentAdjustments, recentRefreshes, error } = data;
 
   const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
   const totalRevenue = campaigns.reduce((sum, c) => sum + c.revenue, 0);
@@ -194,6 +217,7 @@ export default function BrandDetail() {
 
       {connection.connected && !error && (
         <div style={{ ...S.statGrid, marginBottom: 20 }}>
+          <LiveSpendTicker brandId={id} />
           <div style={{ ...S.statTile, background: pastel(0) }}><Stat label={`Spend (${brand.lookbackDays}d)`} value={money(totalSpend)} /></div>
           <div style={{ ...S.statTile, background: pastel(1) }}><Stat label={`Revenue (${brand.lookbackDays}d)`} value={money(totalRevenue)} /></div>
           <div style={{ ...S.statTile, background: pastel(2) }}><Stat label="Blended ROAS" value={roas(blendedRoas)} /></div>
@@ -231,6 +255,17 @@ export default function BrandDetail() {
             <Stat label="vs. expected pace" value={`${pacing.variancePct > 0 ? '+' : ''}${pacing.variancePct}%`} color={PACING_COLOR[pacing.status]} />
             <Stat label="Status" value={PACING_LABEL[pacing.status]} color={PACING_COLOR[pacing.status]} />
           </div>
+          {dailyPacing && dailyPacing.status !== 'too_early' && (
+            <>
+              <p style={{ ...S.label, margin: '20px 0 12px' }}>Today's pacing</p>
+              <div style={S.statGrid}>
+                <Stat label="Spent today" value={money(dailyPacing.spendTodayCents)} />
+                <Stat label="Projected end of day" value={money(dailyPacing.projectedEndOfDayCents)} />
+                <Stat label="vs. expected pace" value={`${dailyPacing.variancePct > 0 ? '+' : ''}${dailyPacing.variancePct}%`} color={PACING_COLOR[dailyPacing.status]} />
+                <Stat label="Status" value={PACING_LABEL[dailyPacing.status]} color={PACING_COLOR[dailyPacing.status]} />
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -331,6 +366,74 @@ export default function BrandDetail() {
                 </tbody>
               </table>
             </div>
+          )
+        )}
+      </div>
+
+      <div style={{ ...S.card, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+          <p style={S.label}>Performance trends & recommendation</p>
+          <button onClick={handleRunTrends} disabled={trendsLoading || !connection.connected} style={{ ...S.btnOutline, opacity: trendsLoading ? 0.6 : 1 }}>
+            {trendsLoading ? 'Analyzing…' : 'Analyze trends now →'}
+          </button>
+        </div>
+        <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
+          Looks back across your cost-cap (scaling) ad sets day by day and asks Claude what the highest-ROAS, highest-spend days had in common — how many winning creatives were live at once, cap amount, and bid strategy. Read-only.
+        </p>
+        {trendsError && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{trendsError}</p>}
+        {trendsResult && (
+          trendsResult.message ? (
+            <p style={{ color: T.soft, fontSize: 14 }}>{trendsResult.message}</p>
+          ) : (
+            <>
+              <div style={{ ...S.card, background: pastel(0), marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <p style={{ ...S.label, marginBottom: 0 }}>Recommendation</p>
+                  <span style={badge(CONFIDENCE_COLOR[trendsResult.confidence])}>{trendsResult.confidence} confidence</span>
+                </div>
+                <p style={{ fontSize: 14, marginBottom: 12 }}>{trendsResult.recommendation}</p>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, color: T.soft }}>
+                  {trendsResult.suggestedLiveCreativeCount && <span><strong style={{ color: T.ink }}>Live creatives:</strong> {trendsResult.suggestedLiveCreativeCount}</span>}
+                  {trendsResult.suggestedCostCap && <span><strong style={{ color: T.ink }}>Cost cap:</strong> {trendsResult.suggestedCostCap}</span>}
+                  {trendsResult.suggestedBidStrategy && <span><strong style={{ color: T.ink }}>Bid strategy:</strong> {trendsResult.suggestedBidStrategy}</span>}
+                </div>
+              </div>
+
+              {trendsResult.keyTrends?.length > 0 && (
+                <ul style={{ margin: '0 0 16px', paddingLeft: 20, fontSize: 13 }}>
+                  {trendsResult.keyTrends.map((t, i) => (
+                    <li key={i} style={{ marginBottom: 8 }}>
+                      <strong>{t.finding}</strong>
+                      <div style={{ color: T.soft, fontSize: 12 }}>{t.evidence}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <p style={{ ...S.label, marginBottom: 0 }}>Daily breakdown ({trendsResult.days.length} days)</p>
+                <button onClick={() => setShowTrendDays((s) => !s)} style={S.btnOutline}>{showTrendDays ? 'Hide' : 'Show'}</button>
+              </div>
+              {showTrendDays && (
+                <div className="table-wrap" style={{ marginTop: 16 }}>
+                  <table className="responsive-table" style={table}>
+                    <thead><tr><th style={th}>Date</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th><th style={th}>Live creatives</th><th style={th}>Caps in use</th></tr></thead>
+                    <tbody>
+                      {trendsResult.days.map((d) => (
+                        <tr key={d.date}>
+                          <td style={td} data-primary="true">{d.date}</td>
+                          <td style={td} data-label="Spend">{money(d.spendCents)}</td>
+                          <td style={td} data-label="Revenue">{money(d.revenueCents)}</td>
+                          <td style={td} data-label="ROAS">{roas(d.roas)}</td>
+                          <td style={td} data-label="Live creatives">{d.liveCreativeCount}</td>
+                          <td style={{ ...td, color: T.soft }} data-label="Caps in use">{d.capsInUse.join(', ') || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )
         )}
       </div>

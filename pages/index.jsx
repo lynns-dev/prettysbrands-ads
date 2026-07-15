@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { T, S, badge, pastel } from '../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../lib/adminAuth';
+import LiveSpendTicker from '../components/LiveSpendTicker';
+import NotificationOptIn from '../components/NotificationOptIn';
 
 export async function getServerSideProps({ req }) {
   const valid = await verifySession(req.cookies?.[SESSION_COOKIE]).catch(() => false);
@@ -99,8 +101,13 @@ export default function Dashboard() {
       <Head><title>Prettys Brands Ads</title></Head>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <span style={{ fontFamily: T.sans, fontSize: 26 }}>Prettys Brands <span style={S.accent1}>Ads</span></span>
-        <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <NotificationOptIn />
+          <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
+        </div>
       </div>
+
+      {!loading && connection?.connected && <div style={{ marginBottom: 20 }}><LiveSpendTicker label="Spend across all brands" /></div>}
 
       {!loading && connection && !connection.connected && (
         <div style={{ ...S.card, marginBottom: 20 }}>
