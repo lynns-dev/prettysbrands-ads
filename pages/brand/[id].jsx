@@ -292,7 +292,11 @@ export default function BrandDetail() {
               <tbody>
                 {winnerResult.ads.map((a) => (
                   <tr key={a.adId}>
-                    <td style={td}>{a.adName}<div style={{ color: T.soft, fontSize: 11 }}>{a.campaignName}</div></td>
+                    <td style={td}>
+                      {a.adName}
+                      {a.adStatus && a.adStatus !== 'ACTIVE' && <span style={{ color: T.soft }}> ({a.adStatus})</span>}
+                      <div style={{ color: T.soft, fontSize: 11 }}>{a.campaignName}</div>
+                    </td>
                     <td style={td}>{money(a.spendCents)}</td>
                     <td style={td}>{roas(a.roas)}</td>
                     <td style={{ ...td, color: VERDICT_COLOR[a.verdict], fontWeight: 700 }}>{a.verdict?.replace('_', ' ')}</td>
