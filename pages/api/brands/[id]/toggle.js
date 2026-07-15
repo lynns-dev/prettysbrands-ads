@@ -1,0 +1,15 @@
+import { updateBrand } from '../../../../lib/brandsStore';
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const brand = await updateBrand(req.query.id, { autoAdjustEnabled: Boolean(req.body?.enabled) });
+    return res.status(200).json({ brand });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+}

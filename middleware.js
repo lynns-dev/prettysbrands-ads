@@ -2,15 +2,17 @@ import { NextResponse } from 'next/server';
 
 const SESSION_COOKIE = 'admin_session';
 
+// The whole app is a single admin tool (no public storefront), so
+// everything requires a session except the login page/route itself and the
+// cron endpoint, which is authenticated separately via CRON_SECRET.
 export const config = {
-  matcher: ['/admin/:path*', '/api/admin/:path*'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
 
-  // The login page/route itself must stay reachable without a session.
-  if (pathname === '/admin/login' || pathname === '/api/admin/login') {
+  if (pathname === '/login' || pathname === '/api/login' || pathname.startsWith('/api/cron/')) {
     return NextResponse.next();
   }
 
@@ -19,11 +21,11 @@ export async function middleware(req) {
 
   if (valid) return NextResponse.next();
 
-  if (pathname.startsWith('/api/admin')) {
+  if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }
 
-  const loginUrl = new URL('/admin/login', req.url);
+  const loginUrl = new URL('/login', req.url);
   return NextResponse.redirect(loginUrl);
 }
 
