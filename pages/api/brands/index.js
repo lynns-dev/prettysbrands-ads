@@ -1,7 +1,8 @@
 import { listBrands, createBrand } from '../../../lib/brandsStore';
 import { getBrandPacing } from '../../../lib/budgetPacing';
+import { withAuth } from '../../../lib/requireAuth';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const brands = await listBrands();
@@ -31,3 +32,5 @@ export default async function handler(req, res) {
   res.setHeader('Allow', 'GET, POST');
   return res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default withAuth(handler);

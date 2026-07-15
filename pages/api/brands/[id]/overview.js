@@ -8,6 +8,7 @@ import { previewBrandAdjustments } from '../../../../lib/costCapBidding';
 import { getBrandPacing } from '../../../../lib/budgetPacing';
 import { getAdjustmentLog } from '../../../../lib/adSpendStore';
 import { getConnectionStatus } from '../../../../lib/metaAdsAuth';
+import { withAuth } from '../../../../lib/requireAuth';
 
 function lookbackRange(lookbackDays) {
   const until = new Date();
@@ -16,7 +17,7 @@ function lookbackRange(lookbackDays) {
   return { since: fmt(since), until: fmt(until) };
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -75,3 +76,5 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...empty, error: err.message });
   }
 }
+
+export default withAuth(handler);

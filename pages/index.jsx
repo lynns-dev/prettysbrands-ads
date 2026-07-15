@@ -3,6 +3,13 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { T, S } from '../lib/theme';
+import { verifySession, SESSION_COOKIE } from '../lib/adminAuth';
+
+export async function getServerSideProps({ req }) {
+  const valid = await verifySession(req.cookies?.[SESSION_COOKIE]).catch(() => false);
+  if (!valid) return { redirect: { destination: '/login', permanent: false } };
+  return { props: {} };
+}
 
 const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 

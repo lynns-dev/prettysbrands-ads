@@ -4,9 +4,11 @@
 // ads_read. The resulting token is shared across all brands — adding a new
 // brand just means adding its ad account ID, not reconnecting.
 
+import { withAuth } from '../../../lib/requireAuth';
+
 const GRAPH_VERSION = 'v21.0';
 
-export default function handler(req, res) {
+function handler(req, res) {
   const appId = process.env.META_APP_ID;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
 
@@ -24,3 +26,5 @@ export default function handler(req, res) {
 
   res.redirect(authorizeUrl.toString());
 }
+
+export default withAuth(handler, { redirectToLogin: true });

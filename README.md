@@ -38,7 +38,7 @@ the whole app sits behind a single admin login.
 
    | Name | Value |
    |------|-------|
-   | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Vercel KV / Upstash Redis store — sessions, brand configs, the Meta token, adjustment history |
+   | `REDIS_URL` | a Redis connection string (Redis Cloud, or any provider giving a `redis://`/`rediss://` URL) — sessions, brand configs, the Meta token, adjustment history |
    | `NEXT_PUBLIC_BASE_URL` | your deployed URL, e.g. `https://prettysbrands-ads.vercel.app` |
    | `ADMIN_PASSWORD` | password for this app — there's no per-user login, just one shared operator password |
    | `META_APP_ID` / `META_APP_SECRET` | from a Meta app with the Marketing API product added — see "Facebook app setup" below |
@@ -89,7 +89,8 @@ npm run dev
 - `lib/brandsStore.js` — KV-backed brand configs (ad account, ROAS target, cost-cap bounds, budget, auto-adjust flag)
 - `lib/adSpendStore.js` — per-brand audit log of applied adjustments
 - `lib/metaAdsTokenStore.js`, `lib/metaAdsAuth.js` — the shared Meta OAuth token
-- `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared KV REST helper
+- `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared Redis (ioredis) helper
+- `lib/requireAuth.js` — API-route auth guard (session check runs here and via `getServerSideProps` on protected pages — not in middleware, since the Redis client needs a Node.js runtime that Edge middleware doesn't provide)
 
 ## Notes
 

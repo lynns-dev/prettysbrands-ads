@@ -3,11 +3,12 @@
 // token, and stores it — the one shared connection used across every brand.
 
 import { setMetaAdsToken } from '../../../lib/metaAdsTokenStore';
+import { withAuth } from '../../../lib/requireAuth';
 
 const GRAPH_VERSION = 'v21.0';
 const GRAPH_URL = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { code, error, error_description } = req.query;
 
   if (error) return res.status(400).send(`Facebook authorization failed: ${error_description || error}`);
@@ -61,3 +62,5 @@ export default async function handler(req, res) {
     res.status(500).send(`Connection failed: ${err.message}`);
   }
 }
+
+export default withAuth(handler, { redirectToLogin: true });

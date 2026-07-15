@@ -1,6 +1,7 @@
 import { getBrand, updateBrand, deleteBrand } from '../../../lib/brandsStore';
+import { withAuth } from '../../../lib/requireAuth';
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const { id } = req.query;
 
   if (req.method === 'GET') {
@@ -26,3 +27,5 @@ export default async function handler(req, res) {
   res.setHeader('Allow', 'GET, PATCH, DELETE');
   return res.status(405).json({ error: 'Method not allowed' });
 }
+
+export default withAuth(handler);
