@@ -47,13 +47,13 @@ the whole app sits behind a single admin login.
   `ANTHROPIC_API_KEY`.
 - **Live ad-spend ticker** — today's spend, polled every ~30s, shown as a
   total across all brands on the dashboard and per-brand on each brand page.
-- **Pacing alerts (phone push)** — an hourly check compares each brand's
-  spend so far today against an expected daily budget (its monthly budget
-  split across the days in the month) and pushes a notification to any
-  opted-in device when it's tracking too fast or too slow, and again when it
-  recovers. Requires a brand to have a monthly budget set, and Web Push to be
-  configured (see below) and enabled from the dashboard's "Enable phone
-  notifications" button.
+- **Pacing alerts (phone push)** — a once-daily check (see the Vercel Cron
+  plan note below) compares each brand's spend so far today against an
+  expected daily budget (its monthly budget split across the days in the
+  month) and pushes a notification to any opted-in device when it's tracking
+  too fast or too slow, and again when it recovers. Requires a brand to have
+  a monthly budget set, and Web Push to be configured (see below) and
+  enabled from the dashboard's "Enable phone notifications" button.
 
 ## Deploy to Vercel
 
@@ -69,14 +69,17 @@ the whole app sits behind a single admin login.
    | `NEXT_PUBLIC_BASE_URL` | your deployed URL, e.g. `https://prettysbrands-ads.vercel.app` |
    | `ADMIN_PASSWORD` | password for this app — there's no per-user login, just one shared operator password |
    | `META_APP_ID` / `META_APP_SECRET` | from a Meta app with the Marketing API product added — see "Facebook app setup" below |
-   | `CRON_SECRET` | any random string (e.g. `openssl rand -hex 16`) — restricts the daily auto-adjust and hourly pacing-check cron jobs to Vercel's own scheduled calls |
+   | `CRON_SECRET` | any random string (e.g. `openssl rand -hex 16`) — restricts the daily auto-adjust and pacing-check cron jobs to Vercel's own scheduled calls |
    | `ANTHROPIC_API_KEY` | *(optional)* powers "Winner detection" and "Performance trends & recommendation" — get one at console.anthropic.com |
    | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | *(optional)* powers phone push notifications for pacing alerts — generate with `npx web-push generate-vapid-keys`; set `VAPID_PUBLIC_KEY` and `NEXT_PUBLIC_VAPID_PUBLIC_KEY` to the same public key value, keep the private key secret |
 
-   > **Vercel Cron plan note:** the Hobby plan only runs cron jobs once a day
-   > regardless of the schedule you set. The hourly pacing check
-   > (`vercel.json`'s `0 * * * *` entry) needs a Pro plan (or higher) to
-   > actually run hourly — on Hobby it'll just run once daily instead.
+   > **Vercel Cron plan note:** the Hobby plan rejects the *entire deployment*
+   > if `vercel.json` has any cron schedule that would run more than once a
+   > day — it's not a soft downgrade, the build fails outright. That's why
+   > both cron entries in `vercel.json` (`ads-auto-adjust` at 13:00 UTC,
+   > `pacing-check` at 20:00 UTC) are once-daily by default. If you're on a
+   > Pro plan or higher and want the pacing check to run more often (hourly
+   > catches same-day drift much faster), change its schedule to `0 * * * *`.
 
 4. Visit `/api/meta-auth/connect` once to authorize Facebook Ads.
 5. Sign in at `/login`, add a brand from the dashboard (name, ad account ID,
@@ -117,7 +120,7 @@ npm run dev
 - `pages/api/meta-auth/connect.js`, `pages/api/meta-auth/callback.js` — one-time, shared Facebook OAuth flow
 - `pages/api/brands/*` — brand CRUD, per-brand overview/auto-adjust/toggle endpoints
 - `pages/api/cron/ads-auto-adjust.js` — daily Vercel Cron job (see `vercel.json`), loops every brand with auto-adjust enabled
-- `pages/api/cron/pacing-check.js` — hourly Vercel Cron job, checks every brand's daily pacing and pushes a phone notification on status changes
+- `pages/api/cron/pacing-check.js` — once-daily Vercel Cron job (hourly on Pro+, see the plan note above), checks every brand's daily pacing and pushes a phone notification on status changes
 - `pages/api/live-spend.js`, `components/LiveSpendTicker.jsx` — today's spend, polled every ~30s, Redis-cached briefly to survive multiple tabs
 - `pages/api/push/subscribe.js`, `lib/webPush.js`, `public/sw.js`, `components/NotificationOptIn.jsx` — Web Push opt-in, subscription storage, and sending
 - `lib/metaMarketingApi.js` — Meta Marketing API client: campaigns, ad sets, ads/creatives, Insights (including day-by-day time series), bid updates, ad-set copy/status
