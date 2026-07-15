@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { T, S, badge } from '../lib/theme';
+import { T, S, badge, pastel } from '../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../lib/adminAuth';
 
 export async function getServerSideProps({ req }) {
@@ -98,14 +98,14 @@ export default function Dashboard() {
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
       <Head><title>Prettys Brands Ads</title></Head>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
-        <span style={{ fontSize: 20, fontWeight: 700 }}>Prettys Brands Ads</span>
+        <span style={{ fontFamily: T.sans, fontSize: 26 }}>Prettys Brands <span style={S.accent1}>Ads</span></span>
         <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
       </div>
 
       {!loading && connection && !connection.connected && (
         <div style={{ ...S.card, marginBottom: 20 }}>
           <p style={{ marginBottom: 12, fontSize: 14 }}>Not connected to Facebook Ads yet — this is a shared connection used across every brand below.</p>
-          <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads</a>
+          <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads →</a>
         </div>
       )}
       {!loading && connection?.connected && (() => {
@@ -121,10 +121,10 @@ export default function Dashboard() {
 
       {!loading && brands.length > 0 && (
         <div style={{ ...S.statGrid, marginBottom: 20 }}>
-          <div style={S.statTile}><Stat label="Brands" value={brands.length} /></div>
-          <div style={S.statTile}><Stat label="Over pace" value={overPaceCount} color={overPaceCount > 0 ? T.warn : T.accent} /></div>
-          <div style={S.statTile}><Stat label="Under pace" value={underPaceCount} color={underPaceCount > 0 ? T.accent : T.soft} /></div>
-          <div style={S.statTile}><Stat label="Automated" value={automatedCount} /></div>
+          <div style={{ ...S.statTile, background: pastel(0) }}><Stat label="Brands" value={brands.length} /></div>
+          <div style={{ ...S.statTile, background: pastel(1) }}><Stat label="Over pace" value={overPaceCount} color={overPaceCount > 0 ? T.warn : T.accent} /></div>
+          <div style={{ ...S.statTile, background: pastel(2) }}><Stat label="Under pace" value={underPaceCount} color={underPaceCount > 0 ? T.accent : T.soft} /></div>
+          <div style={{ ...S.statTile, background: pastel(3) }}><Stat label="Automated" value={automatedCount} /></div>
         </div>
       )}
 
@@ -177,7 +177,7 @@ export default function Dashboard() {
           </div>
           {formError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{formError}</p>}
           <button type="submit" disabled={creating} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: creating ? 0.6 : 1 }}>
-            {creating ? 'Creating…' : 'Create brand'}
+            {creating ? 'Creating…' : 'Create brand →'}
           </button>
         </form>
       )}
@@ -211,7 +211,7 @@ export default function Dashboard() {
                   <input type="checkbox" checked={b.autoAdjustEnabled} onChange={(e) => handleToggle(b.id, e.target.checked)} />
                   Auto-adjust
                 </label>
-                <Link href={`/brand/${b.id}`} style={{ ...S.btnOutline, textDecoration: 'none' }}>Open</Link>
+                <Link href={`/brand/${b.id}`} style={{ ...S.btnOutline, textDecoration: 'none' }}>Open →</Link>
                 <button onClick={() => handleDelete(b.id, b.name)} style={{ ...S.btnOutline, color: T.warn, borderColor: T.warn }}>Remove</button>
               </div>
             </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { T, S, badge } from '../../lib/theme';
+import { T, S, badge, pastel } from '../../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../../lib/adminAuth';
 
 export async function getServerSideProps({ req }) {
@@ -187,17 +187,17 @@ export default function BrandDetail() {
       {!connection.connected && (
         <div style={{ ...S.card, marginBottom: 20 }}>
           <p style={{ marginBottom: 12, fontSize: 14 }}>Facebook Ads isn't connected yet.</p>
-          <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads</a>
+          <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads →</a>
         </div>
       )}
       {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 20 }}>{error}</p>}
 
       {connection.connected && !error && (
         <div style={{ ...S.statGrid, marginBottom: 20 }}>
-          <div style={S.statTile}><Stat label={`Spend (${brand.lookbackDays}d)`} value={money(totalSpend)} /></div>
-          <div style={S.statTile}><Stat label={`Revenue (${brand.lookbackDays}d)`} value={money(totalRevenue)} /></div>
-          <div style={S.statTile}><Stat label="Blended ROAS" value={roas(blendedRoas)} /></div>
-          <div style={S.statTile}><Stat label="Needs attention" value={needsAttention} color={needsAttention > 0 ? T.warn : T.accent} /></div>
+          <div style={{ ...S.statTile, background: pastel(0) }}><Stat label={`Spend (${brand.lookbackDays}d)`} value={money(totalSpend)} /></div>
+          <div style={{ ...S.statTile, background: pastel(1) }}><Stat label={`Revenue (${brand.lookbackDays}d)`} value={money(totalRevenue)} /></div>
+          <div style={{ ...S.statTile, background: pastel(2) }}><Stat label="Blended ROAS" value={roas(blendedRoas)} /></div>
+          <div style={{ ...S.statTile, background: pastel(3) }}><Stat label="Needs attention" value={needsAttention} color={needsAttention > 0 ? T.warn : T.accent} /></div>
         </div>
       )}
 
@@ -217,7 +217,7 @@ export default function BrandDetail() {
           <Field label="Fatigue: min spend vs budget (%)"><input type="number" min="1" max="100" style={S.input} value={settingsForm.fatigueMinSpendVsBudgetPct} onChange={(e) => setSettingsForm({ ...settingsForm, fatigueMinSpendVsBudgetPct: e.target.value })} /></Field>
           <Field label="Fatigue: lookback window (days)"><input type="number" min="1" max="30" style={S.input} value={settingsForm.fatigueLookbackDays} onChange={(e) => setSettingsForm({ ...settingsForm, fatigueLookbackDays: e.target.value })} /></Field>
           {settingsError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{settingsError}</p>}
-          <button type="submit" disabled={saving} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save settings'}</button>
+          <button type="submit" disabled={saving} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save settings →'}</button>
         </form>
       )}
 
@@ -243,7 +243,7 @@ export default function BrandDetail() {
               Daily auto-adjust
             </label>
             <button onClick={handleRunNow} disabled={running || !connection.connected} style={{ ...S.btnOutline, opacity: running ? 0.6 : 1 }}>
-              {running ? 'Running…' : 'Run adjustment now'}
+              {running ? 'Running…' : 'Run adjustment now →'}
             </button>
           </div>
         </div>
@@ -298,7 +298,7 @@ export default function BrandDetail() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <p style={S.label}>Winner detection</p>
           <button onClick={handleRunWinners} disabled={winnerLoading || !connection.connected} style={{ ...S.btnOutline, opacity: winnerLoading ? 0.6 : 1 }}>
-            {winnerLoading ? 'Analyzing…' : 'Analyze test ads now'}
+            {winnerLoading ? 'Analyzing…' : 'Analyze test ads now →'}
           </button>
         </div>
         {!brand.testingCampaignPattern ? (
@@ -344,7 +344,7 @@ export default function BrandDetail() {
               Daily auto-refresh
             </label>
             <button onClick={handleRunFatigueNow} disabled={fatigueRunning || !connection.connected} style={{ ...S.btnOutline, opacity: fatigueRunning ? 0.6 : 1 }}>
-              {fatigueRunning ? 'Checking…' : 'Check for fatigued ads now'}
+              {fatigueRunning ? 'Checking…' : 'Check for fatigued ads now →'}
             </button>
           </div>
         </div>

@@ -31,10 +31,13 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.bg, padding: 16 }}>
       <Head><title>Sign in — Prettys Brands Ads</title></Head>
-      <form onSubmit={handleSubmit} style={{ ...S.card, width: 320 }}>
-        <p style={{ ...S.label, marginBottom: 16 }}>Prettys Brands Ads</p>
+      <form onSubmit={handleSubmit} style={{ ...S.card, width: '100%', maxWidth: 340 }}>
+        <p style={{ ...S.label, marginBottom: 10 }}>Prettys Brands Ads</p>
+        <p style={{ fontFamily: T.sans, fontSize: 30, fontWeight: 400, margin: '0 0 20px' }}>
+          Sign <span style={S.accent1}>in</span>.
+        </p>
         <input
           type="password"
           placeholder="Password"
@@ -46,7 +49,7 @@ export default function Login() {
         />
         {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{error}</p>}
         <button type="submit" disabled={busy} style={{ ...S.btnFill, width: '100%', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? 'Signing in…' : 'Continue'} {!busy && '→'}
         </button>
       </form>
     </div>
