@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { T, S } from '../lib/theme';
+import { T, S, badge } from '../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../lib/adminAuth';
 
 export async function getServerSideProps({ req }) {
@@ -90,16 +90,20 @@ export default function Dashboard() {
     });
   };
 
+  const overPaceCount = brands.filter((b) => b.pacing?.status === 'over_pace').length;
+  const underPaceCount = brands.filter((b) => b.pacing?.status === 'under_pace').length;
+  const automatedCount = brands.filter((b) => b.autoAdjustEnabled || b.autoRefreshEnabled).length;
+
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 80px' }}>
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
       <Head><title>Prettys Brands Ads</title></Head>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <span style={{ fontSize: 20, fontWeight: 700 }}>Prettys Brands Ads</span>
         <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
       </div>
 
       {!loading && connection && !connection.connected && (
-        <div style={{ ...S.card, marginBottom: 24 }}>
+        <div style={{ ...S.card, marginBottom: 20 }}>
           <p style={{ marginBottom: 12, fontSize: 14 }}>Not connected to Facebook Ads yet — this is a shared connection used across every brand below.</p>
           <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads</a>
         </div>
@@ -108,20 +112,29 @@ export default function Dashboard() {
         const daysLeft = Math.round((connection.expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
         const soon = daysLeft <= 7;
         return (
-          <p style={{ fontSize: 13, color: soon ? T.warn : T.soft, marginBottom: 24 }}>
+          <p style={{ fontSize: 13, color: soon ? T.warn : T.soft, marginBottom: 20 }}>
             Facebook Ads connected · expires in {daysLeft} day{daysLeft === 1 ? '' : 's'}
             {soon && ' — re-authorize soon via /api/meta-auth/connect'}
           </p>
         );
       })()}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      {!loading && brands.length > 0 && (
+        <div style={{ ...S.statGrid, marginBottom: 20 }}>
+          <div style={S.statTile}><Stat label="Brands" value={brands.length} /></div>
+          <div style={S.statTile}><Stat label="Over pace" value={overPaceCount} color={overPaceCount > 0 ? T.warn : T.accent} /></div>
+          <div style={S.statTile}><Stat label="Under pace" value={underPaceCount} color={underPaceCount > 0 ? T.accent : T.soft} /></div>
+          <div style={S.statTile}><Stat label="Automated" value={automatedCount} /></div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <p style={S.label}>Brands ({brands.length})</p>
         <button onClick={() => setShowForm((s) => !s)} style={S.btnOutline}>{showForm ? 'Cancel' : 'Add brand'}</button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} style={{ ...S.card, marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <form onSubmit={handleCreate} style={{ ...S.card, ...S.formGrid, marginBottom: 20 }}>
           <div style={field}>
             <label style={fieldLabel}>Brand name</label>
             <input required style={S.input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Smells Iconic" />
@@ -177,19 +190,23 @@ export default function Dashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {brands.map((b) => (
             <div key={b.id} style={{ ...S.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div>
+              <div style={{ flex: '1 1 240px', minWidth: 0 }}>
                 <Link href={`/brand/${b.id}`} style={{ fontWeight: 700, textDecoration: 'none', color: T.ink, fontSize: 15 }}>{b.name}</Link>
                 <div style={{ fontSize: 12, color: T.soft, marginTop: 2 }}>
                   {b.adAccountId} · target {b.targetRoas}x ROAS · cap {money(b.minCostCapCents)}–{money(b.maxCostCapCents)}
                 </div>
                 {b.pacing && (
-                  <div style={{ fontSize: 12, marginTop: 6, color: b.pacing.status === 'over_pace' ? T.warn : b.pacing.status === 'under_pace' ? T.accent : T.soft }}>
-                    {money(b.pacing.spendThisMonthCents)} of {money(b.pacing.monthlyBudgetCents)} this month
-                    {' '}({b.pacing.variancePct > 0 ? '+' : ''}{b.pacing.variancePct}% vs pace)
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={badge(b.pacing.status === 'over_pace' ? T.warn : b.pacing.status === 'under_pace' ? T.accent : T.soft)}>
+                      {b.pacing.status.replace('_', ' ')}
+                    </span>
+                    <span style={{ fontSize: 12, color: T.soft }}>
+                      {money(b.pacing.spendThisMonthCents)} of {money(b.pacing.monthlyBudgetCents)} this month ({b.pacing.variancePct > 0 ? '+' : ''}{b.pacing.variancePct}%)
+                    </span>
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="checkbox" checked={b.autoAdjustEnabled} onChange={(e) => handleToggle(b.id, e.target.checked)} />
                   Auto-adjust
@@ -201,6 +218,15 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: color || T.ink }}>{value}</div>
+      <div style={{ fontSize: 11, color: T.soft, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
     </div>
   );
 }

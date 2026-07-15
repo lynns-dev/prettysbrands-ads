@@ -2,7 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { T, S } from '../../lib/theme';
+import { T, S, badge } from '../../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../../lib/adminAuth';
 
 export async function getServerSideProps({ req }) {
@@ -14,11 +14,14 @@ export async function getServerSideProps({ req }) {
 const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 const roas = (n) => `${Number(n || 0).toFixed(2)}x`;
 const th = { textAlign: 'left', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.soft, padding: '0 10px 8px', borderBottom: `1px solid ${T.line}` };
-const td = { padding: '8px 10px', borderBottom: `1px solid ${T.line}`, fontSize: 13 };
+const td = { padding: '8px 10px', borderBottom: `1px solid ${T.line}`, fontSize: 13, verticalAlign: 'top' };
 const table = { width: '100%', borderCollapse: 'collapse' };
+const statusColor = (s) => (s === 'ACTIVE' ? T.accent : T.soft);
 
 const PACING_LABEL = { over_pace: 'Over pace', under_pace: 'Under pace', on_pace: 'On pace' };
 const PACING_COLOR = { over_pace: T.warn, under_pace: T.accent, on_pace: T.soft };
+const FATIGUE_COLOR = { fatigued: T.warn, failed: T.warn, ok: T.accent, skipped: T.soft };
+const VERDICT_COLOR = { winner: T.accent, promising: T.ink, not_yet: T.soft, underperforming: T.warn };
 
 export default function BrandDetail() {
   const router = useRouter();
@@ -36,6 +39,8 @@ export default function BrandDetail() {
   const [winnerError, setWinnerError] = React.useState('');
   const [fatigueRunning, setFatigueRunning] = React.useState(false);
   const [fatigueMessage, setFatigueMessage] = React.useState('');
+  const [showCampaigns, setShowCampaigns] = React.useState(false);
+  const [showCreatives, setShowCreatives] = React.useState(false);
 
   const load = React.useCallback(() => {
     if (!id) return;
@@ -158,31 +163,46 @@ export default function BrandDetail() {
   }
 
   const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, recentAdjustments, recentRefreshes, error } = data;
-  const VERDICT_COLOR = { winner: T.accent, promising: T.ink, not_yet: T.soft, underperforming: T.warn };
+
+  const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
+  const totalRevenue = campaigns.reduce((sum, c) => sum + c.revenue, 0);
+  const blendedRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+  const fatiguedCount = (fatigue?.results || []).filter((r) => r.action === 'fatigued').length;
+  const adjustCount = (costCap?.results || []).filter((r) => r.action === 'adjust').length;
+  const needsAttention = fatiguedCount + adjustCount;
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 80px' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 16px 60px' }}>
       <Head><title>{brand.name} — Prettys Brands Ads</title></Head>
 
       <Link href="/" style={{ fontSize: 12, color: T.soft, textDecoration: 'none' }}>&larr; All brands</Link>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0 24px' }}>
-        <span style={{ fontSize: 22, fontWeight: 700 }}>{brand.name}</span>
-        <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0 20px', flexWrap: 'wrap', gap: 10 }}>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>{brand.name}</span>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={() => setEditing((s) => !s)} style={S.btnOutline}>{editing ? 'Cancel' : 'Edit settings'}</button>
           <button onClick={handleDelete} style={{ ...S.btnOutline, color: T.warn, borderColor: T.warn }}>Remove brand</button>
         </div>
       </div>
 
       {!connection.connected && (
-        <div style={{ ...S.card, marginBottom: 24 }}>
+        <div style={{ ...S.card, marginBottom: 20 }}>
           <p style={{ marginBottom: 12, fontSize: 14 }}>Facebook Ads isn't connected yet.</p>
           <a href="/api/meta-auth/connect" style={{ ...S.btnFill, textDecoration: 'none' }}>Connect Facebook Ads</a>
         </div>
       )}
-      {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 24 }}>{error}</p>}
+      {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 20 }}>{error}</p>}
+
+      {connection.connected && !error && (
+        <div style={{ ...S.statGrid, marginBottom: 20 }}>
+          <div style={S.statTile}><Stat label={`Spend (${brand.lookbackDays}d)`} value={money(totalSpend)} /></div>
+          <div style={S.statTile}><Stat label={`Revenue (${brand.lookbackDays}d)`} value={money(totalRevenue)} /></div>
+          <div style={S.statTile}><Stat label="Blended ROAS" value={roas(blendedRoas)} /></div>
+          <div style={S.statTile}><Stat label="Needs attention" value={needsAttention} color={needsAttention > 0 ? T.warn : T.accent} /></div>
+        </div>
+      )}
 
       {editing && (
-        <form onSubmit={handleSaveSettings} style={{ ...S.card, marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <form onSubmit={handleSaveSettings} style={{ ...S.card, ...S.formGrid, marginBottom: 20 }}>
           <Field label="Brand name"><input required style={S.input} value={settingsForm.name} onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })} /></Field>
           <Field label="Ad account ID"><input required style={S.input} value={settingsForm.adAccountId} onChange={(e) => setSettingsForm({ ...settingsForm, adAccountId: e.target.value })} /></Field>
           <Field label="Target ROAS"><input required type="number" step="0.1" style={S.input} value={settingsForm.targetRoas} onChange={(e) => setSettingsForm({ ...settingsForm, targetRoas: e.target.value })} /></Field>
@@ -202,9 +222,9 @@ export default function BrandDetail() {
       )}
 
       {pacing && (
-        <div style={{ ...S.card, marginBottom: 24 }}>
+        <div style={{ ...S.card, marginBottom: 20 }}>
           <p style={{ ...S.label, marginBottom: 12 }}>Budget pacing this month</p>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'baseline' }}>
+          <div style={S.statGrid}>
             <Stat label="Spent so far" value={money(pacing.spendThisMonthCents)} />
             <Stat label="Monthly budget" value={money(pacing.monthlyBudgetCents)} />
             <Stat label="Projected month-end" value={money(pacing.projectedEndOfMonthCents)} />
@@ -214,10 +234,10 @@ export default function BrandDetail() {
         </div>
       )}
 
-      <div style={{ ...S.card, marginBottom: 24 }}>
+      <div style={{ ...S.card, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <p style={S.label}>Cost-cap bidding</p>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={brand.autoAdjustEnabled} onChange={(e) => handleToggle(e.target.checked)} />
               Daily auto-adjust
@@ -231,46 +251,50 @@ export default function BrandDetail() {
         {!costCap || costCap.results.length === 0 ? (
           <p style={{ color: T.soft, fontSize: 14 }}>No active COST_CAP ad sets found.</p>
         ) : (
-          <table style={table}>
-            <thead><tr>
-              <th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th><th style={th}>Cap / action</th>
-            </tr></thead>
-            <tbody>
-              {costCap.results.map((r) => (
-                <tr key={r.adSetId}>
-                  <td style={td} title={r.reason}>{r.adSetName}</td>
-                  <td style={td}>{money(r.spend)}</td>
-                  <td style={td}>{money(r.revenue)}</td>
-                  <td style={td}>{roas(r.actualRoas)}</td>
-                  <td style={{ ...td, color: r.action === 'adjust' ? T.ink : T.soft }}>
-                    {r.action === 'adjust' ? `${money(r.currentBidAmount)} → ${money(r.newBidAmount)}` : `${money(r.currentBidAmount)} (${r.action})`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="responsive-table" style={table}>
+              <thead><tr>
+                <th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th><th style={th}>Cap / action</th>
+              </tr></thead>
+              <tbody>
+                {costCap.results.map((r) => (
+                  <tr key={r.adSetId}>
+                    <td style={td} data-primary="true" title={r.reason}>{r.adSetName}</td>
+                    <td style={td} data-label="Spend">{money(r.spend)}</td>
+                    <td style={td} data-label="Revenue">{money(r.revenue)}</td>
+                    <td style={td} data-label="ROAS">{roas(r.actualRoas)}</td>
+                    <td style={{ ...td, color: r.action === 'adjust' ? T.ink : T.soft }} data-label="Cap / action">
+                      {r.action === 'adjust' ? `${money(r.currentBidAmount)} → ${money(r.newBidAmount)}` : `${money(r.currentBidAmount)} (${r.action})`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {recentAdjustments.length > 0 && (
           <>
             <p style={{ ...S.label, margin: '20px 0 10px' }}>Recent adjustments</p>
-            <table style={table}>
-              <thead><tr><th style={th}>Date</th><th style={th}>Ad set</th><th style={th}>Change</th></tr></thead>
-              <tbody>
-                {recentAdjustments.map((a, i) => (
-                  <tr key={`${a.adSetId}-${a.appliedAt}-${i}`}>
-                    <td style={td}>{new Date(a.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
-                    <td style={td}>{a.adSetName}</td>
-                    <td style={td}>{a.action === 'failed' ? `Failed: ${a.reason}` : `${money(a.currentBidAmount)} → ${money(a.newBidAmount)}`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-wrap">
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Ad set</th><th style={th}>Date</th><th style={th}>Change</th></tr></thead>
+                <tbody>
+                  {recentAdjustments.map((a, i) => (
+                    <tr key={`${a.adSetId}-${a.appliedAt}-${i}`}>
+                      <td style={td} data-primary="true">{a.adSetName}</td>
+                      <td style={td} data-label="Date">{new Date(a.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                      <td style={td} data-label="Change">{a.action === 'failed' ? `Failed: ${a.reason}` : `${money(a.currentBidAmount)} → ${money(a.newBidAmount)}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
 
-      <div style={{ ...S.card, marginBottom: 24 }}>
+      <div style={{ ...S.card, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <p style={S.label}>Winner detection</p>
           <button onClick={handleRunWinners} disabled={winnerLoading || !connection.connected} style={{ ...S.btnOutline, opacity: winnerLoading ? 0.6 : 1 }}>
@@ -280,39 +304,41 @@ export default function BrandDetail() {
         {!brand.testingCampaignPattern ? (
           <p style={{ color: T.soft, fontSize: 14 }}>Set a "testing campaign name pattern" in Edit settings to enable this — it's how Claude knows which campaigns are still in testing.</p>
         ) : (
-          <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>Scans active campaigns matching "{brand.testingCampaignPattern}" and asks Claude to judge which ads are winners worth promoting into their own scaling campaign. Read-only — nothing is changed automatically.</p>
+          <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>Scans campaigns matching "{brand.testingCampaignPattern}" (active or paused) and asks Claude to judge which ads are winners worth promoting into their own scaling campaign. Read-only — nothing is changed automatically.</p>
         )}
         {winnerError && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{winnerError}</p>}
         {winnerResult && (
           winnerResult.message ? (
             <p style={{ color: T.soft, fontSize: 14 }}>{winnerResult.message}</p>
           ) : (
-            <table style={table}>
-              <thead><tr><th style={th}>Ad</th><th style={th}>Spend</th><th style={th}>ROAS</th><th style={th}>Verdict</th><th style={th}>Reasoning</th></tr></thead>
-              <tbody>
-                {winnerResult.ads.map((a) => (
-                  <tr key={a.adId}>
-                    <td style={td}>
-                      {a.adName}
-                      {a.adStatus && a.adStatus !== 'ACTIVE' && <span style={{ color: T.soft }}> ({a.adStatus})</span>}
-                      <div style={{ color: T.soft, fontSize: 11 }}>{a.campaignName}</div>
-                    </td>
-                    <td style={td}>{money(a.spendCents)}</td>
-                    <td style={td}>{roas(a.roas)}</td>
-                    <td style={{ ...td, color: VERDICT_COLOR[a.verdict], fontWeight: 700 }}>{a.verdict?.replace('_', ' ')}</td>
-                    <td style={{ ...td, color: T.soft }}>{a.reasoning}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-wrap">
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Ad</th><th style={th}>Spend</th><th style={th}>ROAS</th><th style={th}>Verdict</th><th style={th}>Reasoning</th></tr></thead>
+                <tbody>
+                  {winnerResult.ads.map((a) => (
+                    <tr key={a.adId}>
+                      <td style={td} data-primary="true">
+                        {a.adName}
+                        {a.adStatus && a.adStatus !== 'ACTIVE' && <span style={{ color: T.soft }}> ({a.adStatus})</span>}
+                        <div style={{ color: T.soft, fontSize: 11, fontWeight: 400 }}>{a.campaignName}</div>
+                      </td>
+                      <td style={td} data-label="Spend">{money(a.spendCents)}</td>
+                      <td style={td} data-label="ROAS">{roas(a.roas)}</td>
+                      <td style={td} data-label="Verdict"><span style={badge(VERDICT_COLOR[a.verdict])}>{a.verdict?.replace('_', ' ')}</span></td>
+                      <td style={{ ...td, color: T.soft }} data-label="Reasoning">{a.reasoning}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )
         )}
       </div>
 
-      <div style={{ ...S.card, marginBottom: 24 }}>
+      <div style={{ ...S.card, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
           <p style={S.label}>Ad refresh (fatigue)</p>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={brand.autoRefreshEnabled} onChange={(e) => handleToggleRefresh(e.target.checked)} />
               Daily auto-refresh
@@ -329,98 +355,118 @@ export default function BrandDetail() {
         {!fatigue || fatigue.results.length === 0 ? (
           <p style={{ color: T.soft, fontSize: 14 }}>No single-ad COST_CAP ad sets to evaluate.</p>
         ) : (
-          <table style={table}>
-            <thead><tr><th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Cost/result</th><th style={th}>Cap</th><th style={th}>Status</th></tr></thead>
-            <tbody>
-              {fatigue.results.map((r) => (
-                <tr key={r.adSetId}>
-                  <td style={td} title={r.reason}>{r.adSetName}<div style={{ color: T.soft, fontSize: 11 }}>{r.adName}</div></td>
-                  <td style={td}>{money(r.spend)}</td>
-                  <td style={td}>{r.actualCostPerResult ? money(r.actualCostPerResult) : '—'}</td>
-                  <td style={td}>{money(r.costCap)}</td>
-                  <td style={{ ...td, color: r.action === 'fatigued' ? T.warn : T.soft, fontWeight: r.action === 'fatigued' ? 700 : 400 }}>{r.action}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="responsive-table" style={table}>
+              <thead><tr><th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Cost/result</th><th style={th}>Cap</th><th style={th}>Status</th></tr></thead>
+              <tbody>
+                {fatigue.results.map((r) => (
+                  <tr key={r.adSetId}>
+                    <td style={td} data-primary="true" title={r.reason}>{r.adSetName}<div style={{ color: T.soft, fontSize: 11, fontWeight: 400 }}>{r.adName}</div></td>
+                    <td style={td} data-label="Spend">{money(r.spend)}</td>
+                    <td style={td} data-label="Cost/result">{r.actualCostPerResult ? money(r.actualCostPerResult) : '—'}</td>
+                    <td style={td} data-label="Cap">{money(r.costCap)}</td>
+                    <td style={td} data-label="Status"><span style={badge(FATIGUE_COLOR[r.action] || T.soft)}>{r.action}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {recentRefreshes.length > 0 && (
           <>
             <p style={{ ...S.label, margin: '20px 0 10px' }}>Recent refreshes</p>
-            <table style={table}>
-              <thead><tr><th style={th}>Date</th><th style={th}>Ad set</th><th style={th}>Result</th></tr></thead>
-              <tbody>
-                {recentRefreshes.map((r, i) => (
-                  <tr key={`${r.adSetId}-${r.appliedAt}-${i}`}>
-                    <td style={td}>{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
-                    <td style={td}>{r.adSetName}</td>
-                    <td style={td}>{r.action === 'failed' ? `Failed: ${r.reason}` : `Duplicated into new ad set ${r.newAdSetId}, original paused`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-wrap">
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Ad set</th><th style={th}>Date</th><th style={th}>Result</th></tr></thead>
+                <tbody>
+                  {recentRefreshes.map((r, i) => (
+                    <tr key={`${r.adSetId}-${r.appliedAt}-${i}`}>
+                      <td style={td} data-primary="true">{r.adSetName}</td>
+                      <td style={td} data-label="Date">{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                      <td style={td} data-label="Result">{r.action === 'failed' ? `Failed: ${r.reason}` : `Duplicated into new ad set ${r.newAdSetId}, original paused`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
 
-      <div style={{ ...S.card, marginBottom: 24 }}>
-        <p style={{ ...S.label, marginBottom: 16 }}>Campaigns & ad sets ({campaigns.length})</p>
-        {campaigns.length === 0 ? (
-          <p style={{ color: T.soft, fontSize: 14 }}>No campaigns found.</p>
-        ) : (
-          <table style={table}>
-            <thead><tr><th style={th}>Name</th><th style={th}>Status</th><th style={th}>Bid strategy</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th></tr></thead>
-            <tbody>
-              {campaigns.map((c) => (
-                <React.Fragment key={c.id}>
-                  <tr>
-                    <td style={{ ...td, fontWeight: 700 }}>{c.name}</td>
-                    <td style={td}>{c.effective_status}</td>
-                    <td style={td}>—</td>
-                    <td style={td}>{money(c.spend)}</td>
-                    <td style={td}>{money(c.revenue)}</td>
-                    <td style={td}>{roas(c.roas)}</td>
-                  </tr>
-                  {c.adSets.map((a) => (
-                    <tr key={a.id}>
-                      <td style={{ ...td, paddingLeft: 26, color: T.soft }}>{a.name}</td>
-                      <td style={{ ...td, color: T.soft }}>{a.effective_status}</td>
-                      <td style={{ ...td, color: T.soft }}>{a.bid_strategy || '—'}</td>
-                      <td style={{ ...td, color: T.soft }}>{money(a.spend)}</td>
-                      <td style={{ ...td, color: T.soft }}>{money(a.revenue)}</td>
-                      <td style={{ ...td, color: T.soft }}>{roas(a.roas)}</td>
-                    </tr>
+      <div style={{ ...S.card, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <p style={{ ...S.label, marginBottom: 0 }}>Campaigns & ad sets ({campaigns.length})</p>
+          <button onClick={() => setShowCampaigns((s) => !s)} style={S.btnOutline}>{showCampaigns ? 'Hide' : 'Show'}</button>
+        </div>
+        {showCampaigns && (
+          campaigns.length === 0 ? (
+            <p style={{ color: T.soft, fontSize: 14, marginTop: 16 }}>No campaigns found.</p>
+          ) : (
+            <div className="table-wrap" style={{ marginTop: 16 }}>
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Name</th><th style={th}>Status</th><th style={th}>Bid strategy</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th></tr></thead>
+                <tbody>
+                  {campaigns.map((c) => (
+                    <React.Fragment key={c.id}>
+                      <tr>
+                        <td style={{ ...td, fontWeight: 700 }} data-primary="true">{c.name}</td>
+                        <td style={td} data-label="Status"><span style={badge(statusColor(c.effective_status))}>{c.effective_status}</span></td>
+                        <td style={td} data-label="Bid strategy">—</td>
+                        <td style={td} data-label="Spend">{money(c.spend)}</td>
+                        <td style={td} data-label="Revenue">{money(c.revenue)}</td>
+                        <td style={td} data-label="ROAS">{roas(c.roas)}</td>
+                      </tr>
+                      {c.adSets.map((a) => (
+                        <tr key={a.id}>
+                          <td style={{ ...td, paddingLeft: 26, color: T.soft }} data-primary="true">{a.name}</td>
+                          <td style={td} data-label="Status"><span style={badge(statusColor(a.effective_status))}>{a.effective_status}</span></td>
+                          <td style={{ ...td, color: T.soft }} data-label="Bid strategy">{a.bid_strategy || '—'}</td>
+                          <td style={{ ...td, color: T.soft }} data-label="Spend">{money(a.spend)}</td>
+                          <td style={{ ...td, color: T.soft }} data-label="Revenue">{money(a.revenue)}</td>
+                          <td style={{ ...td, color: T.soft }} data-label="ROAS">{roas(a.roas)}</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
 
       <div style={S.card}>
-        <p style={{ ...S.label, marginBottom: 16 }}>Creative performance ({creatives.length})</p>
-        {creatives.length === 0 ? (
-          <p style={{ color: T.soft, fontSize: 14 }}>No ads found.</p>
-        ) : (
-          <table style={table}>
-            <thead><tr><th style={th}></th><th style={th}>Ad</th><th style={th}>Status</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th></tr></thead>
-            <tbody>
-              {creatives.map((ad) => (
-                <tr key={ad.id}>
-                  <td style={td}>
-                    {ad.creative?.thumbnail_url ? <img src={ad.creative.thumbnail_url} alt="" width={40} height={40} style={{ borderRadius: 4, objectFit: 'cover' }} /> : null}
-                  </td>
-                  <td style={td}>{ad.name}</td>
-                  <td style={td}>{ad.effective_status}</td>
-                  <td style={td}>{money(ad.spend)}</td>
-                  <td style={td}>{money(ad.revenue)}</td>
-                  <td style={td}>{roas(ad.roas)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <p style={{ ...S.label, marginBottom: 0 }}>Creative performance ({creatives.length})</p>
+          <button onClick={() => setShowCreatives((s) => !s)} style={S.btnOutline}>{showCreatives ? 'Hide' : 'Show'}</button>
+        </div>
+        {showCreatives && (
+          creatives.length === 0 ? (
+            <p style={{ color: T.soft, fontSize: 14, marginTop: 16 }}>No ads found.</p>
+          ) : (
+            <div className="table-wrap" style={{ marginTop: 16 }}>
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Ad</th><th style={th}>Status</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th></tr></thead>
+                <tbody>
+                  {creatives.map((ad) => (
+                    <tr key={ad.id}>
+                      <td style={td} data-primary="true">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {ad.creative?.thumbnail_url && <img src={ad.creative.thumbnail_url} alt="" width={32} height={32} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />}
+                          <span>{ad.name}</span>
+                        </div>
+                      </td>
+                      <td style={td} data-label="Status"><span style={badge(statusColor(ad.effective_status))}>{ad.effective_status}</span></td>
+                      <td style={td} data-label="Spend">{money(ad.spend)}</td>
+                      <td style={td} data-label="Revenue">{money(ad.revenue)}</td>
+                      <td style={td} data-label="ROAS">{roas(ad.roas)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
     </div>

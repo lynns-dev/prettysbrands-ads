@@ -1,0 +1,59 @@
+/* Responsive table pattern: below the breakpoint, a table's rows become
+   stacked label:value cards instead of a horizontally-scrolling grid — the
+   single biggest lever for making dense data usable on a phone. Tables opt
+   in via className="responsive-table" and give each <td> a matching
+   data-label (the column header text), which ::before renders as the row
+   label once the real <thead> is hidden. */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .responsive-table thead {
+    display: none;
+  }
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .responsive-table tr {
+    border: 1px solid rgba(22, 26, 23, 0.12);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 4px 12px;
+  }
+  .responsive-table td {
+    border: none !important;
+    padding: 8px 0 !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    text-align: right;
+  }
+  .responsive-table td:empty,
+  .responsive-table td[data-label=""] {
+    display: none;
+  }
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6B7570;
+    flex-shrink: 0;
+    text-align: left;
+  }
+  .responsive-table td[data-primary="true"] {
+    display: block;
+    font-weight: 700;
+    padding-bottom: 2px !important;
+    text-align: left;
+  }
+  .responsive-table td[data-primary="true"]::before {
+    content: none;
+  }
+}
