@@ -332,7 +332,7 @@ export default function BrandDetail() {
           </div>
         </div>
         <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
-          Sorted by spend, highest first. "Over cap" flags an ad set whose actual cost per result (over the lookback window) is running above its own cost cap — regardless of whether the bid-adjust logic below would touch it. "Trend" compares this period's ROAS to the equal-length period right before it — a move of 20% or more is called Declining/Improving rather than Stable, so a real trend doesn't get lost in day-to-day noise. If Trend already shows Declining before you notice an ad set is over cap, that's your signal it was worth duplicating sooner rather than waiting. Duplicate an ad set to give it a fresh ad set and pause the original.
+          Sorted by spend, highest first. "Over cap" flags an ad set whose actual cost per result (over the lookback window) is running above its own cost cap — regardless of whether the bid-adjust logic below would touch it. "Trend" always compares ROAS to the 7 days right before the current period, regardless of your lookback window setting — a move of 20% or more is called Declining/Improving rather than Stable, so a real trend doesn't get lost in day-to-day noise. If Trend already shows Declining before you notice an ad set is over cap, that's your signal it was worth duplicating sooner rather than waiting. Duplicate an ad set to give it a fresh ad set and pause the original.
         </p>
         {runMessage && <p style={{ fontSize: 12, marginBottom: 12 }}>{runMessage}</p>}
         {!costCap || costCap.results.length === 0 ? (
@@ -357,7 +357,7 @@ export default function BrandDetail() {
                       {r.trend ? (
                         <>
                           <span style={badge(TREND_COLOR[r.trend])}>{TREND_LABEL[r.trend]}</span>
-                          <div style={{ fontSize: 11, color: T.soft, marginTop: 2 }}>{r.roasChangePct > 0 ? '+' : ''}{r.roasChangePct}% vs. prior {brand.lookbackDays}d</div>
+                          <div style={{ fontSize: 11, color: T.soft, marginTop: 2 }}>{r.roasChangePct > 0 ? '+' : ''}{r.roasChangePct}% vs. prior 7d</div>
                         </>
                       ) : '—'}
                     </td>
