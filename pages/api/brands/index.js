@@ -1,20 +1,11 @@
 import { listBrands, createBrand } from '../../../lib/brandsStore';
-import { getBrandPacing } from '../../../lib/budgetPacing';
 import { withAuth } from '../../../lib/requireAuth';
 
 async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const brands = await listBrands();
-      // Only brands with a monthly budget set cost an extra Graph API call
-      // here — everyone else is just the stored config, no live data.
-      const withPacing = await Promise.all(
-        brands.map(async (brand) => {
-          const pacing = await getBrandPacing(brand).catch(() => null);
-          return { ...brand, pacing };
-        })
-      );
-      return res.status(200).json({ brands: withPacing });
+      return res.status(200).json({ brands });
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }

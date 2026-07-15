@@ -2,10 +2,8 @@ import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { T, S, badge, pastel } from '../lib/theme';
+import { T, S } from '../lib/theme';
 import { verifySession, SESSION_COOKIE } from '../lib/adminAuth';
-import LiveSpendTicker from '../components/LiveSpendTicker';
-import NotificationOptIn from '../components/NotificationOptIn';
 
 export async function getServerSideProps({ req }) {
   const valid = await verifySession(req.cookies?.[SESSION_COOKIE]).catch(() => false);
@@ -13,14 +11,7 @@ export async function getServerSideProps({ req }) {
   return { props: {} };
 }
 
-const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
-
-const DEFAULT_FORM = {
-  name: '', adAccountId: '', targetRoas: 3, minCostCapCents: 100, maxCostCapCents: 500,
-  monthlyBudgetCents: '', maxAdjustmentPct: 20, minSpendMultiplier: 10, lookbackDays: 7,
-  testingCampaignPattern: '',
-};
-
+const DEFAULT_FORM = { name: '', adAccountId: '' };
 const fieldLabel = { ...S.label, display: 'block', marginBottom: 6 };
 const field = { display: 'flex', flexDirection: 'column' };
 
@@ -62,7 +53,7 @@ export default function Dashboard() {
       const res = await fetch('/api/brands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, monthlyBudgetCents: form.monthlyBudgetCents === '' ? null : Number(form.monthlyBudgetCents) }),
+        body: JSON.stringify(form),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -83,31 +74,13 @@ export default function Dashboard() {
     load();
   };
 
-  const handleToggle = async (id, enabled) => {
-    setBrands((prev) => prev.map((b) => (b.id === id ? { ...b, autoAdjustEnabled: enabled } : b)));
-    await fetch(`/api/brands/${id}/toggle`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    });
-  };
-
-  const overPaceCount = brands.filter((b) => b.pacing?.status === 'over_pace').length;
-  const underPaceCount = brands.filter((b) => b.pacing?.status === 'under_pace').length;
-  const automatedCount = brands.filter((b) => b.autoAdjustEnabled || b.autoRefreshEnabled).length;
-
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px 60px' }}>
       <Head><title>Prettys Brands Ads</title></Head>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <span style={{ fontFamily: T.sans, fontSize: 26 }}>Prettys Brands <span style={S.accent1}>Ads</span></span>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <NotificationOptIn />
-          <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
-        </div>
+        <button onClick={handleLogout} style={S.btnOutline}>Sign out</button>
       </div>
-
-      {!loading && connection?.connected && <LiveSpendTicker title="Live ad spend across all brands" />}
 
       {!loading && connection && !connection.connected && (
         <div style={{ ...S.card, marginBottom: 20 }}>
@@ -126,15 +99,6 @@ export default function Dashboard() {
         );
       })()}
 
-      {!loading && brands.length > 0 && (
-        <div style={{ ...S.statGrid, marginBottom: 20 }}>
-          <div style={{ ...S.statTile, background: pastel(0) }}><Stat label="Brands" value={brands.length} /></div>
-          <div style={{ ...S.statTile, background: pastel(1) }}><Stat label="Over pace" value={overPaceCount} color={overPaceCount > 0 ? T.warn : T.accent} /></div>
-          <div style={{ ...S.statTile, background: pastel(2) }}><Stat label="Under pace" value={underPaceCount} color={underPaceCount > 0 ? T.accent : T.soft} /></div>
-          <div style={{ ...S.statTile, background: pastel(3) }}><Stat label="Automated" value={automatedCount} /></div>
-        </div>
-      )}
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <p style={S.label}>Brands ({brands.length})</p>
         <button onClick={() => setShowForm((s) => !s)} style={S.btnOutline}>{showForm ? 'Cancel' : 'Add brand'}</button>
@@ -149,38 +113,6 @@ export default function Dashboard() {
           <div style={field}>
             <label style={fieldLabel}>Ad account ID</label>
             <input required style={S.input} value={form.adAccountId} onChange={(e) => setForm({ ...form, adAccountId: e.target.value })} placeholder="act_1234567890" />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Target ROAS</label>
-            <input required type="number" step="0.1" min="0.1" style={S.input} value={form.targetRoas} onChange={(e) => setForm({ ...form, targetRoas: e.target.value })} />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Monthly budget ($, optional)</label>
-            <input type="number" min="0" style={S.input} value={form.monthlyBudgetCents === '' ? '' : form.monthlyBudgetCents / 100} onChange={(e) => setForm({ ...form, monthlyBudgetCents: e.target.value === '' ? '' : Math.round(Number(e.target.value) * 100) })} placeholder="5000" />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Min cost cap ($)</label>
-            <input required type="number" step="0.01" min="0.01" style={S.input} value={form.minCostCapCents / 100} onChange={(e) => setForm({ ...form, minCostCapCents: Math.round(Number(e.target.value) * 100) })} />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Max cost cap ($)</label>
-            <input required type="number" step="0.01" min="0.01" style={S.input} value={form.maxCostCapCents / 100} onChange={(e) => setForm({ ...form, maxCostCapCents: Math.round(Number(e.target.value) * 100) })} />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Max adjustment per run (%)</label>
-            <input type="number" min="1" max="100" style={S.input} value={form.maxAdjustmentPct} onChange={(e) => setForm({ ...form, maxAdjustmentPct: e.target.value })} />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Min spend multiplier</label>
-            <input type="number" min="1" style={S.input} value={form.minSpendMultiplier} onChange={(e) => setForm({ ...form, minSpendMultiplier: e.target.value })} />
-          </div>
-          <div style={field}>
-            <label style={fieldLabel}>Lookback window (days)</label>
-            <input type="number" min="1" max="90" style={S.input} value={form.lookbackDays} onChange={(e) => setForm({ ...form, lookbackDays: e.target.value })} />
-          </div>
-          <div style={{ ...field, gridColumn: '1 / -1' }}>
-            <label style={fieldLabel}>Testing campaign name pattern (optional)</label>
-            <input style={S.input} value={form.testingCampaignPattern} onChange={(e) => setForm({ ...form, testingCampaignPattern: e.target.value })} placeholder="e.g. Test" />
           </div>
           {formError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{formError}</p>}
           <button type="submit" disabled={creating} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: creating ? 0.6 : 1 }}>
@@ -199,25 +131,9 @@ export default function Dashboard() {
             <div key={b.id} style={{ ...S.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 240px', minWidth: 0 }}>
                 <Link href={`/brand/${b.id}`} style={{ fontWeight: 700, textDecoration: 'none', color: T.ink, fontSize: 15 }}>{b.name}</Link>
-                <div style={{ fontSize: 12, color: T.soft, marginTop: 2 }}>
-                  {b.adAccountId} · target {b.targetRoas}x ROAS · cap {money(b.minCostCapCents)}–{money(b.maxCostCapCents)}
-                </div>
-                {b.pacing && (
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={badge(b.pacing.status === 'over_pace' ? T.warn : b.pacing.status === 'under_pace' ? T.accent : T.soft)}>
-                      {b.pacing.status.replace('_', ' ')}
-                    </span>
-                    <span style={{ fontSize: 12, color: T.soft }}>
-                      {money(b.pacing.spendThisMonthCents)} of {money(b.pacing.monthlyBudgetCents)} this month ({b.pacing.variancePct > 0 ? '+' : ''}{b.pacing.variancePct}%)
-                    </span>
-                  </div>
-                )}
+                <div style={{ fontSize: 12, color: T.soft, marginTop: 2 }}>{b.adAccountId}</div>
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={b.autoAdjustEnabled} onChange={(e) => handleToggle(b.id, e.target.checked)} />
-                  Auto-adjust
-                </label>
                 <Link href={`/brand/${b.id}`} style={{ ...S.btnOutline, textDecoration: 'none' }}>Open →</Link>
                 <button onClick={() => handleDelete(b.id, b.name)} style={{ ...S.btnOutline, color: T.warn, borderColor: T.warn }}>Remove</button>
               </div>
@@ -225,15 +141,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: color || T.ink }}>{value}</div>
-      <div style={{ fontSize: 11, color: T.soft, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
     </div>
   );
 }

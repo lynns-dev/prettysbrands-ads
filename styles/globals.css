@@ -9,12 +9,6 @@
   overflow-x: auto;
 }
 
-/* The live-spend ticker's "on air" dot (components/LiveSpendTicker.jsx) */
-@keyframes pbLivePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
 @media (max-width: 720px) {
   .responsive-table thead {
     display: none;
