@@ -107,7 +107,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {!loading && connection?.connected && <div style={{ marginBottom: 20 }}><LiveSpendTicker label="Spend across all brands" /></div>}
+      {!loading && connection?.connected && <LiveSpendTicker title="Live ad spend across all brands" />}
 
       {!loading && connection && !connection.connected && (
         <div style={{ ...S.card, marginBottom: 20 }}>

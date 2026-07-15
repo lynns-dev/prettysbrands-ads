@@ -215,9 +215,10 @@ export default function BrandDetail() {
       )}
       {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 20 }}>{error}</p>}
 
+      {connection.connected && !error && <LiveSpendTicker brandId={id} title={`${brand.name} · live ad spend`} />}
+
       {connection.connected && !error && (
         <div style={{ ...S.statGrid, marginBottom: 20 }}>
-          <LiveSpendTicker brandId={id} />
           <div style={{ ...S.statTile, background: pastel(0) }}><Stat label={`Spend (${brand.lookbackDays}d)`} value={money(totalSpend)} /></div>
           <div style={{ ...S.statTile, background: pastel(1) }}><Stat label={`Revenue (${brand.lookbackDays}d)`} value={money(totalRevenue)} /></div>
           <div style={{ ...S.statTile, background: pastel(2) }}><Stat label="Blended ROAS" value={roas(blendedRoas)} /></div>
