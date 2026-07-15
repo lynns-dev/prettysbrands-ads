@@ -45,6 +45,8 @@ export default function BrandDetail() {
   const [showTrendDays, setShowTrendDays] = React.useState(false);
   const [fatigueRunning, setFatigueRunning] = React.useState(false);
   const [fatigueMessage, setFatigueMessage] = React.useState('');
+  const [duplicatingId, setDuplicatingId] = React.useState(null);
+  const [duplicateMessages, setDuplicateMessages] = React.useState({});
   const [showCampaigns, setShowCampaigns] = React.useState(false);
   const [showCreatives, setShowCreatives] = React.useState(false);
 
@@ -98,6 +100,25 @@ export default function BrandDetail() {
     await fetch(`/api/brands/${id}/toggle-refresh`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
     });
+  };
+
+  const handleDuplicateAdSet = async (adSetId, adSetName) => {
+    if (!confirm(`Duplicate "${adSetName}" into a fresh ad set and pause the original?`)) return;
+    setDuplicatingId(adSetId);
+    setDuplicateMessages((prev) => ({ ...prev, [adSetId]: '' }));
+    try {
+      const res = await fetch(`/api/brands/${id}/adsets/duplicate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adSetId, adSetName }),
+      });
+      const result = await res.json();
+      setDuplicateMessages((prev) => ({
+        ...prev,
+        [adSetId]: res.ok ? `Duplicated into new ad set ${result.newAdSetId}, original paused.` : (result.error || 'Duplicate failed.'),
+      }));
+    } finally {
+      setDuplicatingId(null);
+      load();
+    }
   };
 
   const handleRunFatigueNow = async () => {
@@ -308,6 +329,9 @@ export default function BrandDetail() {
             </button>
           </div>
         </div>
+        <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
+          "Over cap" flags an ad set whose actual cost per result (over the lookback window) is running above its own cost cap — regardless of whether the bid-adjust logic below would touch it. Duplicate it to give it a fresh ad set and pause the original.
+        </p>
         {runMessage && <p style={{ fontSize: 12, marginBottom: 12 }}>{runMessage}</p>}
         {!costCap || costCap.results.length === 0 ? (
           <p style={{ color: T.soft, fontSize: 14 }}>No active COST_CAP ad sets found.</p>
@@ -315,17 +339,31 @@ export default function BrandDetail() {
           <div className="table-wrap">
             <table className="responsive-table" style={table}>
               <thead><tr>
-                <th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th><th style={th}>Cap / action</th>
+                <th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Revenue</th><th style={th}>ROAS</th><th style={th}>Cost/result</th><th style={th}>Cap / action</th><th style={th}></th>
               </tr></thead>
               <tbody>
                 {costCap.results.map((r) => (
                   <tr key={r.adSetId}>
-                    <td style={td} data-primary="true" title={r.reason}>{r.adSetName}</td>
+                    <td style={td} data-primary="true" title={r.reason}>
+                      {r.adSetName}
+                      {r.overCap && <span style={{ marginLeft: 8 }}><span style={badge(T.warn)}>Over cap</span></span>}
+                    </td>
                     <td style={td} data-label="Spend">{money(r.spend)}</td>
                     <td style={td} data-label="Revenue">{money(r.revenue)}</td>
                     <td style={td} data-label="ROAS">{roas(r.actualRoas)}</td>
+                    <td style={{ ...td, color: r.overCap ? T.warn : T.ink }} data-label="Cost/result">{r.actualCostPerResult != null ? money(r.actualCostPerResult) : '—'}</td>
                     <td style={{ ...td, color: r.action === 'adjust' ? T.ink : T.soft }} data-label="Cap / action">
                       {r.action === 'adjust' ? `${money(r.currentBidAmount)} → ${money(r.newBidAmount)}` : `${money(r.currentBidAmount)} (${r.action})`}
+                    </td>
+                    <td style={td} data-label="Actions">
+                      <button
+                        onClick={() => handleDuplicateAdSet(r.adSetId, r.adSetName)}
+                        disabled={duplicatingId === r.adSetId}
+                        style={{ ...S.btnOutline, height: 32, padding: '0 14px', fontSize: 12, opacity: duplicatingId === r.adSetId ? 0.6 : 1 }}
+                      >
+                        {duplicatingId === r.adSetId ? 'Duplicating…' : 'Duplicate ad set →'}
+                      </button>
+                      {duplicateMessages[r.adSetId] && <div style={{ fontSize: 11, color: T.soft, marginTop: 4 }}>{duplicateMessages[r.adSetId]}</div>}
                     </td>
                   </tr>
                 ))}
