@@ -326,11 +326,11 @@ export default function BrandDetail() {
           <p style={{ color: T.soft, fontSize: 14 }}>No single-ad COST_CAP ad sets to evaluate.</p>
         ) : (
           <table style={table}>
-            <thead><tr><th style={th}>Ad</th><th style={th}>Spend</th><th style={th}>Cost/result</th><th style={th}>Cap</th><th style={th}>Status</th></tr></thead>
+            <thead><tr><th style={th}>Ad set</th><th style={th}>Spend</th><th style={th}>Cost/result</th><th style={th}>Cap</th><th style={th}>Status</th></tr></thead>
             <tbody>
               {fatigue.results.map((r) => (
                 <tr key={r.adSetId}>
-                  <td style={td} title={r.reason}>{r.adName}<div style={{ color: T.soft, fontSize: 11 }}>{r.adSetName}</div></td>
+                  <td style={td} title={r.reason}>{r.adSetName}<div style={{ color: T.soft, fontSize: 11 }}>{r.adName}</div></td>
                   <td style={td}>{money(r.spend)}</td>
                   <td style={td}>{r.actualCostPerResult ? money(r.actualCostPerResult) : '—'}</td>
                   <td style={td}>{money(r.costCap)}</td>
@@ -345,12 +345,12 @@ export default function BrandDetail() {
           <>
             <p style={{ ...S.label, margin: '20px 0 10px' }}>Recent refreshes</p>
             <table style={table}>
-              <thead><tr><th style={th}>Date</th><th style={th}>Ad</th><th style={th}>Result</th></tr></thead>
+              <thead><tr><th style={th}>Date</th><th style={th}>Ad set</th><th style={th}>Result</th></tr></thead>
               <tbody>
                 {recentRefreshes.map((r, i) => (
                   <tr key={`${r.adSetId}-${r.appliedAt}-${i}`}>
                     <td style={td}>{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
-                    <td style={td}>{r.adName}</td>
+                    <td style={td}>{r.adSetName}</td>
                     <td style={td}>{r.action === 'failed' ? `Failed: ${r.reason}` : `Duplicated into new ad set ${r.newAdSetId}, original paused`}</td>
                   </tr>
                 ))}
