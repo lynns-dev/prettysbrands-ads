@@ -19,8 +19,8 @@ const td = { padding: '8px 10px', borderBottom: `1px solid ${T.line}`, fontSize:
 const table = { width: '100%', borderCollapse: 'collapse' };
 const statusColor = (s) => (s === 'ACTIVE' ? T.accent : T.soft);
 
-const PACING_LABEL = { over_pace: 'Over pace', under_pace: 'Under pace', on_pace: 'On pace' };
-const PACING_COLOR = { over_pace: T.warn, under_pace: T.accent, on_pace: T.soft };
+const PACING_LABEL = { over_pace: 'Over pace', under_pace: 'Under pace', on_pace: 'On pace', too_early: 'Too early to tell' };
+const PACING_COLOR = { over_pace: T.warn, under_pace: T.accent, on_pace: T.soft, too_early: T.soft };
 const FATIGUE_COLOR = { fatigued: T.warn, failed: T.warn, ok: T.accent, skipped: T.soft };
 const VERDICT_COLOR = { winner: T.accent, promising: T.ink, not_yet: T.soft, underperforming: T.warn };
 const CONFIDENCE_COLOR = { high: T.accent, medium: T.ink, low: T.soft };
@@ -185,7 +185,7 @@ export default function BrandDetail() {
     return <div style={{ maxWidth: 1000, margin: '0 auto', padding: 32 }}><p style={{ color: T.soft }}>Loading…</p></div>;
   }
 
-  const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, dailyPacing, recentAdjustments, recentRefreshes, error } = data;
+  const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, dailyPacing, todayPerformance, recentAdjustments, recentRefreshes, error } = data;
 
   const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
   const totalRevenue = campaigns.reduce((sum, c) => sum + c.revenue, 0);
@@ -216,6 +216,31 @@ export default function BrandDetail() {
       {error && <p style={{ color: T.warn, fontSize: 13, marginBottom: 20 }}>{error}</p>}
 
       {connection.connected && !error && <LiveSpendTicker brandId={id} title={`${brand.name} · live ad spend`} />}
+
+      {connection.connected && !error && todayPerformance.length > 0 && (
+        <div style={{ ...S.card, marginBottom: 20 }}>
+          <p style={{ ...S.label, marginBottom: 12 }}>Today's performance (cost-cap ad sets)</p>
+          <div className="table-wrap">
+            <table className="responsive-table" style={table}>
+              <thead><tr>
+                <th style={th}>Ad set</th><th style={th}>ROAS</th><th style={th}>Cost/result</th><th style={th}>Cost cap</th><th style={th}>% of daily goal</th><th style={th}>Pace</th>
+              </tr></thead>
+              <tbody>
+                {todayPerformance.map((r) => (
+                  <tr key={r.adSetId}>
+                    <td style={td} data-primary="true">{r.adSetName}</td>
+                    <td style={td} data-label="ROAS">{roas(r.roas)}</td>
+                    <td style={td} data-label="Cost/result">{r.costPerResultCents != null ? money(r.costPerResultCents) : '—'}</td>
+                    <td style={td} data-label="Cost cap">{money(r.costCapCents)}</td>
+                    <td style={td} data-label="% of daily goal">{r.pacing ? `${r.pacing.pctOfDailyBudget}%` : '—'}</td>
+                    <td style={td} data-label="Pace">{r.pacing ? <span style={badge(PACING_COLOR[r.pacing.status])}>{PACING_LABEL[r.pacing.status]}</span> : <span style={{ color: T.soft }}>No daily budget set</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {connection.connected && !error && (
         <div style={{ ...S.statGrid, marginBottom: 20 }}>
