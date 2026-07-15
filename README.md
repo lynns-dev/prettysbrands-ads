@@ -27,6 +27,18 @@ the whole app sits behind a single admin login.
   max %-change per run, and skips ad sets that haven't spent enough yet to
   trust the signal. **Off by default per brand** — an operator switches it on
   from that brand's page once the live preview looks right.
+- **AI winner detection** — on demand, Claude reviews every active ad in
+  campaigns matching a brand's "testing campaign pattern" and flags which
+  ones look like winners worth promoting into their own `COST_CAP` scaling
+  campaign, with reasoning per ad. Read-only — it's a recommendation, not an
+  automated action; requires `ANTHROPIC_API_KEY`.
+- **Ad-refresh (fatigue) auto-detection** — for single-ad `COST_CAP` ad sets,
+  flags an ad as fatigued when its actual cost per result has drifted well
+  over the ad set's cost cap *while spend hasn't dropped off* (Meta is still
+  feeding it budget on accumulated relevance rather than genuinely meeting
+  the cap). When triggered, the ad set is deep-copied into a fresh one (new
+  ad, same targeting/budget/cap) and the original is paused. **Off by
+  default per brand.**
 
 ## Deploy to Vercel
 
@@ -43,6 +55,7 @@ the whole app sits behind a single admin login.
    | `ADMIN_PASSWORD` | password for this app — there's no per-user login, just one shared operator password |
    | `META_APP_ID` / `META_APP_SECRET` | from a Meta app with the Marketing API product added — see "Facebook app setup" below |
    | `CRON_SECRET` | any random string (e.g. `openssl rand -hex 16`) — restricts the daily auto-adjust cron job to Vercel's own scheduled calls |
+   | `ANTHROPIC_API_KEY` | *(optional)* powers the "Winner detection" panel — get one at console.anthropic.com |
 
 4. Visit `/api/meta-auth/connect` once to authorize Facebook Ads.
 5. Sign in at `/login`, add a brand from the dashboard (name, ad account ID,
@@ -83,11 +96,14 @@ npm run dev
 - `pages/api/meta-auth/connect.js`, `pages/api/meta-auth/callback.js` — one-time, shared Facebook OAuth flow
 - `pages/api/brands/*` — brand CRUD, per-brand overview/auto-adjust/toggle endpoints
 - `pages/api/cron/ads-auto-adjust.js` — daily Vercel Cron job (see `vercel.json`), loops every brand with auto-adjust enabled
-- `lib/metaMarketingApi.js` — Meta Marketing API client: campaigns, ad sets, ads/creatives, Insights, bid updates
+- `lib/metaMarketingApi.js` — Meta Marketing API client: campaigns, ad sets, ads/creatives, Insights, bid updates, ad-set copy/status
 - `lib/costCapBidding.js` — computes each ad set's bid-cap adjustment from its ROAS vs. a brand's target, with min/max/step guardrails
+- `lib/adFatigue.js` — detects single-ad `COST_CAP` ad sets whose cost per result has drifted over cap without spend dropping off, and deep-copies + pauses them; `lib/adRefreshStore.js` is its per-brand audit log
+- `lib/aiInsights.js` — Claude-powered winner detection over a brand's testing-pool ads (see `pages/api/brands/[id]/winners.js`)
 - `lib/budgetPacing.js` — month-to-date spend vs. a brand's monthly budget
-- `lib/brandsStore.js` — KV-backed brand configs (ad account, ROAS target, cost-cap bounds, budget, auto-adjust flag)
-- `lib/adSpendStore.js` — per-brand audit log of applied adjustments
+- `lib/brandsStore.js` — KV-backed brand configs (ad account, ROAS target, cost-cap bounds, budget, testing pattern, fatigue guardrails, auto-adjust/auto-refresh flags)
+- `lib/adSpendStore.js` — per-brand audit log of applied cost-cap adjustments
+- `lib/dateRange.js` — shared "last N days" helper
 - `lib/metaAdsTokenStore.js`, `lib/metaAdsAuth.js` — the shared Meta OAuth token
 - `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared Redis (ioredis) helper
 - `lib/requireAuth.js` — API-route auth guard (session check runs here and via `getServerSideProps` on protected pages — not in middleware, since the Redis client needs a Node.js runtime that Edge middleware doesn't provide)
@@ -101,3 +117,11 @@ npm run dev
 - **Multi-brand ad accounts:** every brand shares the one Meta connection,
   so the authorizing Facebook user needs to already be an admin on each
   brand's ad account before you add it here.
+- **Ad-refresh scope:** only ad sets with exactly one active ad are
+  evaluated for fatigue — deep-copying an ad set with several ads would
+  duplicate all of them, not just the fatigued one, so multi-ad ad sets are
+  skipped rather than guessed at.
+- **Winner detection cost:** each run calls the Claude API (`claude-opus-4-8`)
+  over every active ad in the matched testing campaigns — it's a manual
+  button, not part of the daily cron, precisely so it only runs (and costs
+  tokens) when you ask for it.

@@ -16,6 +16,7 @@ const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 const DEFAULT_FORM = {
   name: '', adAccountId: '', targetRoas: 3, minCostCapCents: 100, maxCostCapCents: 500,
   monthlyBudgetCents: '', maxAdjustmentPct: 20, minSpendMultiplier: 10, lookbackDays: 7,
+  testingCampaignPattern: '',
 };
 
 const fieldLabel = { ...S.label, display: 'block', marginBottom: 6 };
@@ -156,6 +157,10 @@ export default function Dashboard() {
           <div style={field}>
             <label style={fieldLabel}>Lookback window (days)</label>
             <input type="number" min="1" max="90" style={S.input} value={form.lookbackDays} onChange={(e) => setForm({ ...form, lookbackDays: e.target.value })} />
+          </div>
+          <div style={{ ...field, gridColumn: '1 / -1' }}>
+            <label style={fieldLabel}>Testing campaign name pattern (optional)</label>
+            <input style={S.input} value={form.testingCampaignPattern} onChange={(e) => setForm({ ...form, testingCampaignPattern: e.target.value })} placeholder="e.g. Test" />
           </div>
           {formError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{formError}</p>}
           <button type="submit" disabled={creating} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: creating ? 0.6 : 1 }}>

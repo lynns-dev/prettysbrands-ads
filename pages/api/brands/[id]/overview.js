@@ -5,17 +5,13 @@
 import { getBrand } from '../../../../lib/brandsStore';
 import { listCampaigns, listAdSets, listAds, getInsights } from '../../../../lib/metaMarketingApi';
 import { previewBrandAdjustments } from '../../../../lib/costCapBidding';
+import { previewBrandFatigue } from '../../../../lib/adFatigue';
 import { getBrandPacing } from '../../../../lib/budgetPacing';
 import { getAdjustmentLog } from '../../../../lib/adSpendStore';
+import { getRefreshLog } from '../../../../lib/adRefreshStore';
 import { getConnectionStatus } from '../../../../lib/metaAdsAuth';
 import { withAuth } from '../../../../lib/requireAuth';
-
-function lookbackRange(lookbackDays) {
-  const until = new Date();
-  const since = new Date(until.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-  const fmt = (d) => d.toISOString().slice(0, 10);
-  return { since: fmt(since), until: fmt(until) };
-}
+import { lookbackRange } from '../../../../lib/dateRange';
 
 async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -27,7 +23,7 @@ async function handler(req, res) {
   if (!brand) return res.status(404).json({ error: 'Brand not found.' });
 
   const connection = await getConnectionStatus().catch(() => ({ connected: false }));
-  const empty = { brand, connection, campaigns: [], creatives: [], costCap: null, pacing: null, recentAdjustments: [], error: null };
+  const empty = { brand, connection, campaigns: [], creatives: [], costCap: null, pacing: null, recentAdjustments: [], fatigue: null, recentRefreshes: [], error: null };
   if (!connection.connected) return res.status(200).json(empty);
 
   try {
@@ -61,16 +57,19 @@ async function handler(req, res) {
       return { ...a, ...insight, roas: insight.spend > 0 ? insight.revenue / insight.spend : 0 };
     });
 
-    const [costCapResults, pacing, recentAdjustments] = await Promise.all([
+    const [costCapResults, fatigueResults, pacing, recentAdjustments, recentRefreshes] = await Promise.all([
       previewBrandAdjustments(brand),
+      previewBrandFatigue(brand),
       getBrandPacing(brand),
       getAdjustmentLog(brand.id, 20),
+      getRefreshLog(brand.id, 20),
     ]);
 
     return res.status(200).json({
       brand, connection, campaigns, creatives,
       costCap: { results: costCapResults, lookbackDays: brand.lookbackDays, targetRoas: brand.targetRoas },
-      pacing, recentAdjustments, error: null,
+      fatigue: { results: fatigueResults },
+      pacing, recentAdjustments, recentRefreshes, error: null,
     });
   } catch (err) {
     return res.status(200).json({ ...empty, error: err.message });

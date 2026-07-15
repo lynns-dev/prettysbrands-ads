@@ -31,6 +31,11 @@ export default function BrandDetail() {
   const [settingsForm, setSettingsForm] = React.useState(null);
   const [settingsError, setSettingsError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [winnerLoading, setWinnerLoading] = React.useState(false);
+  const [winnerResult, setWinnerResult] = React.useState(null);
+  const [winnerError, setWinnerError] = React.useState('');
+  const [fatigueRunning, setFatigueRunning] = React.useState(false);
+  const [fatigueMessage, setFatigueMessage] = React.useState('');
 
   const load = React.useCallback(() => {
     if (!id) return;
@@ -42,6 +47,9 @@ export default function BrandDetail() {
         minCostCapCents: d.brand.minCostCapCents, maxCostCapCents: d.brand.maxCostCapCents,
         monthlyBudgetCents: d.brand.monthlyBudgetCents ?? '', maxAdjustmentPct: d.brand.maxAdjustmentPct,
         minSpendMultiplier: d.brand.minSpendMultiplier, lookbackDays: d.brand.lookbackDays,
+        testingCampaignPattern: d.brand.testingCampaignPattern || '',
+        fatigueCostCapMarginPct: d.brand.fatigueCostCapMarginPct, fatigueMinSpendVsBudgetPct: d.brand.fatigueMinSpendVsBudgetPct,
+        fatigueLookbackDays: d.brand.fatigueLookbackDays,
       });
     }).finally(() => setLoading(false));
   }, [id]);
@@ -71,6 +79,49 @@ export default function BrandDetail() {
     } finally {
       setRunning(false);
       load();
+    }
+  };
+
+  const handleToggleRefresh = async (enabled) => {
+    setData((prev) => ({ ...prev, brand: { ...prev.brand, autoRefreshEnabled: enabled } }));
+    await fetch(`/api/brands/${id}/toggle-refresh`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
+    });
+  };
+
+  const handleRunFatigueNow = async () => {
+    setFatigueRunning(true);
+    setFatigueMessage('');
+    try {
+      const res = await fetch(`/api/brands/${id}/fatigue-refresh`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setFatigueMessage(result.error || 'Run failed.');
+      } else {
+        const applied = (result.applied || []).filter((a) => a.action === 'refreshed');
+        const failed = (result.applied || []).filter((a) => a.action === 'failed');
+        setFatigueMessage(applied.length === 0 && failed.length === 0 ? 'Ran now — no fatigued ads found.' : `Refreshed ${applied.length} ad${applied.length === 1 ? '' : 's'}${failed.length ? `, ${failed.length} failed.` : '.'}`);
+      }
+    } finally {
+      setFatigueRunning(false);
+      load();
+    }
+  };
+
+  const handleRunWinners = async () => {
+    setWinnerLoading(true);
+    setWinnerError('');
+    setWinnerResult(null);
+    try {
+      const res = await fetch(`/api/brands/${id}/winners`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) {
+        setWinnerError(result.error || 'Analysis failed.');
+      } else {
+        setWinnerResult(result);
+      }
+    } finally {
+      setWinnerLoading(false);
     }
   };
 
@@ -106,7 +157,8 @@ export default function BrandDetail() {
     return <div style={{ maxWidth: 1000, margin: '0 auto', padding: 32 }}><p style={{ color: T.soft }}>Loading…</p></div>;
   }
 
-  const { brand, connection, campaigns, creatives, costCap, pacing, recentAdjustments, error } = data;
+  const { brand, connection, campaigns, creatives, costCap, fatigue, pacing, recentAdjustments, recentRefreshes, error } = data;
+  const VERDICT_COLOR = { winner: T.accent, promising: T.ink, not_yet: T.soft, underperforming: T.warn };
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px 80px' }}>
@@ -140,6 +192,10 @@ export default function BrandDetail() {
           <Field label="Max adjustment per run (%)"><input type="number" min="1" max="100" style={S.input} value={settingsForm.maxAdjustmentPct} onChange={(e) => setSettingsForm({ ...settingsForm, maxAdjustmentPct: e.target.value })} /></Field>
           <Field label="Min spend multiplier"><input type="number" min="1" style={S.input} value={settingsForm.minSpendMultiplier} onChange={(e) => setSettingsForm({ ...settingsForm, minSpendMultiplier: e.target.value })} /></Field>
           <Field label="Lookback window (days)"><input type="number" min="1" max="90" style={S.input} value={settingsForm.lookbackDays} onChange={(e) => setSettingsForm({ ...settingsForm, lookbackDays: e.target.value })} /></Field>
+          <Field label="Testing campaign name pattern"><input style={S.input} value={settingsForm.testingCampaignPattern} onChange={(e) => setSettingsForm({ ...settingsForm, testingCampaignPattern: e.target.value })} placeholder="e.g. Test" /></Field>
+          <Field label="Fatigue: cost cap margin (%)"><input type="number" min="1" max="200" style={S.input} value={settingsForm.fatigueCostCapMarginPct} onChange={(e) => setSettingsForm({ ...settingsForm, fatigueCostCapMarginPct: e.target.value })} /></Field>
+          <Field label="Fatigue: min spend vs budget (%)"><input type="number" min="1" max="100" style={S.input} value={settingsForm.fatigueMinSpendVsBudgetPct} onChange={(e) => setSettingsForm({ ...settingsForm, fatigueMinSpendVsBudgetPct: e.target.value })} /></Field>
+          <Field label="Fatigue: lookback window (days)"><input type="number" min="1" max="30" style={S.input} value={settingsForm.fatigueLookbackDays} onChange={(e) => setSettingsForm({ ...settingsForm, fatigueLookbackDays: e.target.value })} /></Field>
           {settingsError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{settingsError}</p>}
           <button type="submit" disabled={saving} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save settings'}</button>
         </form>
@@ -206,6 +262,96 @@ export default function BrandDetail() {
                     <td style={td}>{new Date(a.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
                     <td style={td}>{a.adSetName}</td>
                     <td style={td}>{a.action === 'failed' ? `Failed: ${a.reason}` : `${money(a.currentBidAmount)} → ${money(a.newBidAmount)}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      <div style={{ ...S.card, marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+          <p style={S.label}>Winner detection</p>
+          <button onClick={handleRunWinners} disabled={winnerLoading || !connection.connected} style={{ ...S.btnOutline, opacity: winnerLoading ? 0.6 : 1 }}>
+            {winnerLoading ? 'Analyzing…' : 'Analyze test ads now'}
+          </button>
+        </div>
+        {!brand.testingCampaignPattern ? (
+          <p style={{ color: T.soft, fontSize: 14 }}>Set a "testing campaign name pattern" in Edit settings to enable this — it's how Claude knows which campaigns are still in testing.</p>
+        ) : (
+          <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>Scans active campaigns matching "{brand.testingCampaignPattern}" and asks Claude to judge which ads are winners worth promoting into their own scaling campaign. Read-only — nothing is changed automatically.</p>
+        )}
+        {winnerError && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{winnerError}</p>}
+        {winnerResult && (
+          winnerResult.message ? (
+            <p style={{ color: T.soft, fontSize: 14 }}>{winnerResult.message}</p>
+          ) : (
+            <table style={table}>
+              <thead><tr><th style={th}>Ad</th><th style={th}>Spend</th><th style={th}>ROAS</th><th style={th}>Verdict</th><th style={th}>Reasoning</th></tr></thead>
+              <tbody>
+                {winnerResult.ads.map((a) => (
+                  <tr key={a.adId}>
+                    <td style={td}>{a.adName}<div style={{ color: T.soft, fontSize: 11 }}>{a.campaignName}</div></td>
+                    <td style={td}>{money(a.spendCents)}</td>
+                    <td style={td}>{roas(a.roas)}</td>
+                    <td style={{ ...td, color: VERDICT_COLOR[a.verdict], fontWeight: 700 }}>{a.verdict?.replace('_', ' ')}</td>
+                    <td style={{ ...td, color: T.soft }}>{a.reasoning}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        )}
+      </div>
+
+      <div style={{ ...S.card, marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+          <p style={S.label}>Ad refresh (fatigue)</p>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={brand.autoRefreshEnabled} onChange={(e) => handleToggleRefresh(e.target.checked)} />
+              Daily auto-refresh
+            </label>
+            <button onClick={handleRunFatigueNow} disabled={fatigueRunning || !connection.connected} style={{ ...S.btnOutline, opacity: fatigueRunning ? 0.6 : 1 }}>
+              {fatigueRunning ? 'Checking…' : 'Check for fatigued ads now'}
+            </button>
+          </div>
+        </div>
+        <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
+          When an ad's cost per result drifts well over its cost cap but spend hasn't dropped off, that ad is likely coasting on stale relevance. When enabled, it's duplicated into a fresh ad set and the original is paused.
+        </p>
+        {fatigueMessage && <p style={{ fontSize: 12, marginBottom: 12 }}>{fatigueMessage}</p>}
+        {!fatigue || fatigue.results.length === 0 ? (
+          <p style={{ color: T.soft, fontSize: 14 }}>No single-ad COST_CAP ad sets to evaluate.</p>
+        ) : (
+          <table style={table}>
+            <thead><tr><th style={th}>Ad</th><th style={th}>Spend</th><th style={th}>Cost/result</th><th style={th}>Cap</th><th style={th}>Status</th></tr></thead>
+            <tbody>
+              {fatigue.results.map((r) => (
+                <tr key={r.adSetId}>
+                  <td style={td} title={r.reason}>{r.adName}<div style={{ color: T.soft, fontSize: 11 }}>{r.adSetName}</div></td>
+                  <td style={td}>{money(r.spend)}</td>
+                  <td style={td}>{r.actualCostPerResult ? money(r.actualCostPerResult) : '—'}</td>
+                  <td style={td}>{money(r.costCap)}</td>
+                  <td style={{ ...td, color: r.action === 'fatigued' ? T.warn : T.soft, fontWeight: r.action === 'fatigued' ? 700 : 400 }}>{r.action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {recentRefreshes.length > 0 && (
+          <>
+            <p style={{ ...S.label, margin: '20px 0 10px' }}>Recent refreshes</p>
+            <table style={table}>
+              <thead><tr><th style={th}>Date</th><th style={th}>Ad</th><th style={th}>Result</th></tr></thead>
+              <tbody>
+                {recentRefreshes.map((r, i) => (
+                  <tr key={`${r.adSetId}-${r.appliedAt}-${i}`}>
+                    <td style={td}>{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                    <td style={td}>{r.adName}</td>
+                    <td style={td}>{r.action === 'failed' ? `Failed: ${r.reason}` : `Duplicated into new ad set ${r.newAdSetId}, original paused`}</td>
                   </tr>
                 ))}
               </tbody>
