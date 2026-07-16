@@ -21,6 +21,16 @@ time on a small, well-understood base rather than all at once.
   account: today's spend, ROAS (revenue ÷ spend from Meta's own attributed
   purchase data), and CPA (cost per acquisition — spend ÷ purchases). Sorted
   by spend, highest first.
+- **Revive winning creatives.** On demand, scans every paused/inactive ad
+  for a historical ROAS at or above the brand's target (over a configurable
+  lookback, with a minimum spend to trust the number) and flags the ones
+  that once worked but aren't live now. Duplicating one copies a
+  brand-designated "template" ad set's targeting/placements/optimization
+  goal into the brand's designated scaling campaign as a fresh ad set on
+  `COST_CAP` bidding with its own ad-set-level (ABO) daily budget, then
+  creates a new ad there reusing the winning creative. Manual, reviewed
+  action — nothing is created until you click "Duplicate" on a specific
+  candidate.
 
 That's the entire feature set right now.
 
@@ -73,12 +83,13 @@ npm run dev
 
 - `pages/login.jsx`, `pages/api/login.js`, `pages/api/logout.js` — single shared admin login
 - `pages/index.jsx` — brand list dashboard: connection status, add/remove brands
-- `pages/brand/[id].jsx` — per-brand detail: today's spend/ROAS/CPA per ad set, editable name/ad account ID
+- `pages/brand/[id].jsx` — per-brand detail: today's spend/ROAS/CPA per ad set, creative revival scan/duplicate, editable settings
 - `pages/api/meta-auth/connect.js`, `pages/api/meta-auth/callback.js` — one-time, shared Facebook OAuth flow
-- `pages/api/brands/*` — brand CRUD + per-brand overview endpoint
-- `lib/metaMarketingApi.js` — Meta Marketing API client: active ad sets + their Insights (spend/revenue/purchases) for a date range
+- `pages/api/brands/*` — brand CRUD + per-brand overview endpoint; `[id]/revivable.js` (scan) and `[id]/revive.js` (duplicate) for creative revival
+- `lib/metaMarketingApi.js` — Meta Marketing API client: active ad sets, all ads (any status), Insights (spend/revenue/purchases) at ad-set or ad level, ad-set copy (into a different campaign), COST_CAP + ABO budget update, ad creation from an existing creative
 - `lib/todayPerformance.js` — today's spend/ROAS/CPA per active ad set, sorted by spend
-- `lib/brandsStore.js` — KV-backed brand configs (name, ad account ID)
+- `lib/creativeRevival.js` — finds past-winning ads that aren't live now and duplicates one into a fresh ad set; `lib/creativeRevivalStore.js` is its per-brand audit log
+- `lib/brandsStore.js` — KV-backed brand configs (name, ad account ID, creative-revival thresholds/destination)
 - `lib/metaAdsTokenStore.js`, `lib/metaAdsAuth.js` — the shared Meta OAuth token
 - `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared Redis (ioredis) helper
 - `lib/requireAuth.js` — API-route auth guard (session check runs here and via `getServerSideProps` on protected pages — not in middleware, since the Redis client needs a Node.js runtime that Edge middleware doesn't provide)
@@ -95,3 +106,11 @@ npm run dev
 - **"Today" is genuinely today:** Meta's attribution can lag by up to a day
   or two, so today's numbers are necessarily partial and will keep climbing
   as more conversions get attributed — that's the platform, not a bug here.
+- **ABO requires a non-CBO destination campaign:** the scaling campaign a
+  revived creative lands in must NOT have Campaign Budget Optimization
+  turned on — Meta rejects an ad-set-level daily budget under a CBO
+  campaign. If "Duplicate" fails with a budget-related error, this is the
+  first thing to check.
+- **Template ad set ID and scaling campaign ID are raw Meta IDs**, not
+  names — find them in Ads Manager (or the URL when viewing that ad
+  set/campaign) and paste the numeric ID in, same as the ad account ID.
