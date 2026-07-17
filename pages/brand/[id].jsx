@@ -32,6 +32,19 @@ export default function BrandDetail() {
   const [revivingId, setRevivingId] = React.useState(null);
   const [reviveMessages, setReviveMessages] = React.useState({});
 
+  const [file, setFile] = React.useState(null);
+  const [asset, setAsset] = React.useState(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [uploadError, setUploadError] = React.useState('');
+  const [uploadForm, setUploadForm] = React.useState({
+    adSetName: '', campaignId: '', costCapCents: '', dailyBudgetCents: '', link: '', ctaType: 'SHOP_NOW',
+  });
+  const [copyVersions, setCopyVersions] = React.useState([{ headline: '', body: '' }]);
+  const [creatingAdSet, setCreatingAdSet] = React.useState(false);
+  const [createError, setCreateError] = React.useState('');
+  const [createResult, setCreateResult] = React.useState(null);
+
   const load = React.useCallback(() => {
     if (!id) return;
     setLoading(true);
@@ -43,6 +56,7 @@ export default function BrandDetail() {
         minSpendCents: d.brand.minSpendCents,
         templateAdSetId: d.brand.templateAdSetId || '', scalingCampaignId: d.brand.scalingCampaignId || '',
         costCapCents: d.brand.costCapCents ?? '', aboDailyBudgetCents: d.brand.aboDailyBudgetCents ?? '',
+        pageId: d.brand.pageId || '', pixelId: d.brand.pixelId || '',
       });
     }).finally(() => setLoading(false));
   }, [id]);
@@ -118,12 +132,125 @@ export default function BrandDetail() {
     }
   };
 
+  const handleFileChange = (e) => {
+    setFile(e.target.files?.[0] || null);
+    setAsset(null);
+    setUploadError('');
+    setCreateResult(null);
+  };
+
+  // Images go up in one request (Meta's base64 `bytes` shortcut). Videos
+  // routinely exceed the ~4.5MB request-body limit this app's API routes
+  // run under, so they go through Meta's resumable upload protocol instead
+  // — the browser slices the file and relays it a few MB at a time.
+  const handleUploadAsset = async () => {
+    if (!file) return;
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError('');
+    try {
+      if (file.type.startsWith('video/')) {
+        const startRes = await fetch(`/api/brands/${id}/creatives/video/start`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileSizeBytes: file.size }),
+        });
+        const start = await startRes.json();
+        if (!startRes.ok) throw new Error(start.error || 'Video upload failed to start.');
+
+        let { startOffset, endOffset } = start;
+        const { videoId, uploadSessionId } = start;
+        while (startOffset < file.size) {
+          const chunk = file.slice(startOffset, Math.max(endOffset, startOffset + 1));
+          const res = await fetch(`/api/brands/${id}/creatives/video/transfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream', 'x-upload-session-id': uploadSessionId, 'x-start-offset': String(startOffset) },
+            body: chunk,
+          });
+          const transferred = await res.json();
+          if (!res.ok) throw new Error(transferred.error || 'Video chunk upload failed.');
+          startOffset = transferred.startOffset;
+          endOffset = transferred.endOffset;
+          setUploadProgress(Math.min(100, Math.round((startOffset / file.size) * 100)));
+        }
+
+        const finishRes = await fetch(`/api/brands/${id}/creatives/video/finish`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadSessionId, videoId }),
+        });
+        const finish = await finishRes.json();
+        if (!finishRes.ok) throw new Error(finish.error || 'Video upload failed to finish.');
+        setAsset({ assetType: 'video', videoId, thumbnailUrl: finish.thumbnailUrl });
+      } else {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const res = await fetch(`/api/brands/${id}/creatives/upload-image`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base64 }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Image upload failed.');
+        setAsset({ assetType: 'image', imageHash: result.imageHash });
+        setUploadProgress(100);
+      }
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleVersionChange = (i, field, value) => {
+    setCopyVersions((prev) => prev.map((v, idx) => (idx === i ? { ...v, [field]: value } : v)));
+  };
+  const handleAddVersion = () => setCopyVersions((prev) => [...prev, { headline: '', body: '' }]);
+  const handleRemoveVersion = (i) => setCopyVersions((prev) => prev.filter((_, idx) => idx !== i));
+
+  const handleCreateAdSet = async (e) => {
+    e.preventDefault();
+    setCreateError('');
+    setCreateResult(null);
+    setCreatingAdSet(true);
+    try {
+      const res = await fetch(`/api/brands/${id}/creatives/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adSetName: uploadForm.adSetName,
+          campaignId: uploadForm.campaignId,
+          costCapCents: Math.round(Number(uploadForm.costCapCents) * 100),
+          dailyBudgetCents: Math.round(Number(uploadForm.dailyBudgetCents) * 100),
+          link: uploadForm.link,
+          ctaType: uploadForm.ctaType,
+          ...asset,
+          copyVersions,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setCreateError(result.error || 'Failed to create ad set.');
+      } else {
+        setCreateResult(result);
+        setFile(null);
+        setAsset(null);
+        setCopyVersions([{ headline: '', body: '' }]);
+      }
+    } finally {
+      setCreatingAdSet(false);
+      load();
+    }
+  };
+
   if (loading || !data) {
     return <div style={{ maxWidth: 800, margin: '0 auto', padding: 32 }}><p style={{ color: T.soft }}>Loading…</p></div>;
   }
 
-  const { brand, connection, todayPerformance, recentRevivals, error } = data;
+  const { brand, connection, todayPerformance, recentRevivals, recentNewCreatives, error } = data;
   const revivalConfigured = brand.templateAdSetId && brand.scalingCampaignId && brand.costCapCents && brand.aboDailyBudgetCents;
+  const uploadConfigured = brand.pageId && brand.pixelId;
+  const canCreateAdSet = asset && uploadForm.campaignId && uploadForm.costCapCents && uploadForm.dailyBudgetCents && uploadForm.link && copyVersions.every((v) => v.headline.trim() && v.body.trim());
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px 60px' }}>
@@ -157,6 +284,8 @@ export default function BrandDetail() {
           <Field label="Scaling campaign ID"><input style={S.input} value={settingsForm.scalingCampaignId} onChange={(e) => setSettingsForm({ ...settingsForm, scalingCampaignId: e.target.value })} placeholder="Must not use CBO" /></Field>
           <Field label="Cost cap ($)"><input type="number" min="0" step="0.01" style={S.input} value={settingsForm.costCapCents === '' ? '' : settingsForm.costCapCents / 100} onChange={(e) => setSettingsForm({ ...settingsForm, costCapCents: e.target.value === '' ? '' : Math.round(Number(e.target.value) * 100) })} /></Field>
           <Field label="ABO daily budget ($)"><input type="number" min="0" step="0.01" style={S.input} value={settingsForm.aboDailyBudgetCents === '' ? '' : settingsForm.aboDailyBudgetCents / 100} onChange={(e) => setSettingsForm({ ...settingsForm, aboDailyBudgetCents: e.target.value === '' ? '' : Math.round(Number(e.target.value) * 100) })} /></Field>
+          <Field label="Facebook Page ID"><input style={S.input} value={settingsForm.pageId} onChange={(e) => setSettingsForm({ ...settingsForm, pageId: e.target.value })} placeholder="Runs every ad's identity" /></Field>
+          <Field label="Pixel ID"><input style={S.input} value={settingsForm.pixelId} onChange={(e) => setSettingsForm({ ...settingsForm, pixelId: e.target.value })} placeholder="For purchase-goal optimization" /></Field>
           {settingsError && <p style={{ color: T.warn, fontSize: 13, gridColumn: '1 / -1' }}>{settingsError}</p>}
           <button type="submit" disabled={saving} style={{ ...S.btnFill, gridColumn: '1 / -1', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save settings →'}</button>
         </form>
@@ -248,6 +377,101 @@ export default function BrandDetail() {
                       <td style={td} data-primary="true">{r.adName}</td>
                       <td style={td} data-label="Date">{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
                       <td style={td} data-label="Result">{r.action === 'failed' ? `Failed: ${r.reason}` : `New ad set ${r.newAdSetId}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ ...S.card, marginTop: 20 }}>
+        <p style={{ ...S.label, marginBottom: 12 }}>Upload new creative</p>
+        <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
+          Every version below reuses the same uploaded image/video — only the headline and body copy differ, each becoming its own ad in one new ad set. Targeting is fixed for now: United States, automatic placements, optimized for purchases via the brand's pixel.
+        </p>
+        {!uploadConfigured && (
+          <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>Set a Facebook Page ID and Pixel ID in Edit settings first.</p>
+        )}
+
+        <form onSubmit={handleCreateAdSet}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ ...S.label, display: 'block', marginBottom: 6 }}>Creative file (image or video)</label>
+            <input type="file" accept="image/*,video/*" onChange={handleFileChange} style={{ fontSize: 13 }} />
+            {file && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button type="button" onClick={handleUploadAsset} disabled={uploading || !!asset} style={{ ...S.btnOutline, height: 34, padding: '0 14px', fontSize: 12, opacity: (uploading || asset) ? 0.6 : 1 }}>
+                  {asset ? 'Uploaded ✓' : uploading ? `Uploading… ${uploadProgress}%` : 'Upload asset →'}
+                </button>
+                <span style={{ fontSize: 12, color: T.soft }}>{file.name}</span>
+              </div>
+            )}
+            {uploadError && <p style={{ color: T.warn, fontSize: 13, marginTop: 8 }}>{uploadError}</p>}
+          </div>
+
+          <div style={{ ...S.formGrid, marginBottom: 14 }}>
+            <Field label="Ad set name"><input style={S.input} value={uploadForm.adSetName} onChange={(e) => setUploadForm({ ...uploadForm, adSetName: e.target.value })} placeholder="e.g. New Creative — Jan" /></Field>
+            <Field label="Campaign ID"><input required style={S.input} value={uploadForm.campaignId} onChange={(e) => setUploadForm({ ...uploadForm, campaignId: e.target.value })} placeholder="Must not use CBO" /></Field>
+            <Field label="Cost cap ($)"><input required type="number" min="0" step="0.01" style={S.input} value={uploadForm.costCapCents} onChange={(e) => setUploadForm({ ...uploadForm, costCapCents: e.target.value })} /></Field>
+            <Field label="Daily budget ($)"><input required type="number" min="0" step="0.01" style={S.input} value={uploadForm.dailyBudgetCents} onChange={(e) => setUploadForm({ ...uploadForm, dailyBudgetCents: e.target.value })} /></Field>
+            <Field label="Destination link"><input required type="url" style={S.input} value={uploadForm.link} onChange={(e) => setUploadForm({ ...uploadForm, link: e.target.value })} placeholder="https://..." /></Field>
+            <Field label="Call to action">
+              <select style={S.input} value={uploadForm.ctaType} onChange={(e) => setUploadForm({ ...uploadForm, ctaType: e.target.value })}>
+                <option value="SHOP_NOW">Shop now</option>
+                <option value="LEARN_MORE">Learn more</option>
+                <option value="SIGN_UP">Sign up</option>
+                <option value="DOWNLOAD">Download</option>
+              </select>
+            </Field>
+          </div>
+
+          <p style={{ ...S.label, marginBottom: 10 }}>Copy versions ({copyVersions.length})</p>
+          {copyVersions.map((v, i) => (
+            <div key={i} style={{ ...S.card, marginBottom: 10, background: T.bg }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>Version {i + 1}</span>
+                {copyVersions.length > 1 && <button type="button" onClick={() => handleRemoveVersion(i)} style={{ ...S.btnOutline, height: 28, padding: '0 10px', fontSize: 11, color: T.warn, borderColor: T.warn }}>Remove</button>}
+              </div>
+              <div style={{ ...S.formGrid }}>
+                <Field label="Headline"><input required style={S.input} placeholder="e.g. 20% off this week only" value={v.headline} onChange={(e) => handleVersionChange(i, 'headline', e.target.value)} /></Field>
+                <Field label="Body copy"><textarea required rows={2} style={{ ...S.input, height: 'auto', borderRadius: 16, padding: '10px 18px' }} placeholder="Primary text shown above the creative" value={v.body} onChange={(e) => handleVersionChange(i, 'body', e.target.value)} /></Field>
+              </div>
+            </div>
+          ))}
+          <button type="button" onClick={handleAddVersion} style={{ ...S.btnOutline, marginBottom: 16 }}>+ Add another version</button>
+
+          {createError && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{createError}</p>}
+          <button type="submit" disabled={!canCreateAdSet || creatingAdSet} style={{ ...S.btnFill, opacity: (!canCreateAdSet || creatingAdSet) ? 0.6 : 1 }}>
+            {creatingAdSet ? 'Creating…' : 'Create ad set →'}
+          </button>
+        </form>
+
+        {createResult && (
+          <div style={{ ...S.card, background: T.bg, marginTop: 16 }}>
+            <p style={{ fontSize: 13, marginBottom: 8 }}>
+              New ad set <strong>{createResult.newAdSetId}</strong>: {createResult.adsCreated} ad{createResult.adsCreated === 1 ? '' : 's'} created{createResult.adsFailed > 0 ? `, ${createResult.adsFailed} failed` : ''}.
+            </p>
+            {createResult.errors?.length > 0 && (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: T.warn }}>
+                {createResult.errors.map((e, i) => <li key={i}>{e.headline}: {e.reason}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {recentNewCreatives?.length > 0 && (
+          <>
+            <p style={{ ...S.label, margin: '20px 0 10px' }}>Recent uploads</p>
+            <div className="table-wrap">
+              <table className="responsive-table" style={table}>
+                <thead><tr><th style={th}>Ad set</th><th style={th}>Date</th><th style={th}>Result</th></tr></thead>
+                <tbody>
+                  {recentNewCreatives.map((r, i) => (
+                    <tr key={`${r.newAdSetId}-${r.appliedAt}-${i}`}>
+                      <td style={td} data-primary="true">{r.adSetName}</td>
+                      <td style={td} data-label="Date">{new Date(r.appliedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                      <td style={td} data-label="Result">{r.adsCreated} ad{r.adsCreated === 1 ? '' : 's'} in {r.newAdSetId}{r.adsFailed > 0 ? `, ${r.adsFailed} failed` : ''}</td>
                     </tr>
                   ))}
                 </tbody>

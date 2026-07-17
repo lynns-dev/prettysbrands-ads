@@ -31,6 +31,12 @@ time on a small, well-understood base rather than all at once.
   creates a new ad there reusing the winning creative. Manual, reviewed
   action — nothing is created until you click "Duplicate" on a specific
   candidate.
+- **Upload new creative.** Upload an image or video, then create one or
+  more headline/body copy versions against that same asset — each version
+  becomes its own ad inside one brand-new ad set, in a campaign you pick, at
+  a cost cap and daily budget you pick. Targeting is fixed for now: United
+  States, automatic (Advantage+) placements, optimized for purchases via the
+  brand's pixel. No other targeting controls exist yet.
 
 That's the entire feature set right now.
 
@@ -89,7 +95,9 @@ npm run dev
 - `lib/metaMarketingApi.js` — Meta Marketing API client: active ad sets, all ads (any status), Insights (spend/revenue/purchases) at ad-set or ad level, ad-set copy (into a different campaign), COST_CAP + ABO budget update, ad creation from an existing creative
 - `lib/todayPerformance.js` — today's spend/ROAS/CPA per active ad set, sorted by spend
 - `lib/creativeRevival.js` — finds past-winning ads that aren't live now and duplicates one into a fresh ad set; `lib/creativeRevivalStore.js` is its per-brand audit log
-- `lib/brandsStore.js` — KV-backed brand configs (name, ad account ID, creative-revival thresholds/destination)
+- `lib/creativeUpload.js` — builds a new ad set + one ad creative/ad per copy version from an uploaded asset; `lib/newCreativeStore.js` is its per-brand audit log
+- `pages/api/brands/[id]/creatives/upload-image.js`, `.../video/{start,transfer,finish}.js`, `.../create.js` — asset upload (single-request for images, Meta's resumable protocol relayed in chunks for video) and ad set/creative/ad creation
+- `lib/brandsStore.js` — KV-backed brand configs (name, ad account ID, creative-revival thresholds/destination, Facebook Page ID, Pixel ID)
 - `lib/metaAdsTokenStore.js`, `lib/metaAdsAuth.js` — the shared Meta OAuth token
 - `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared Redis (ioredis) helper
 - `lib/requireAuth.js` — API-route auth guard (session check runs here and via `getServerSideProps` on protected pages — not in middleware, since the Redis client needs a Node.js runtime that Edge middleware doesn't provide)
@@ -106,11 +114,25 @@ npm run dev
 - **"Today" is genuinely today:** Meta's attribution can lag by up to a day
   or two, so today's numbers are necessarily partial and will keep climbing
   as more conversions get attributed — that's the platform, not a bug here.
-- **ABO requires a non-CBO destination campaign:** the scaling campaign a
-  revived creative lands in must NOT have Campaign Budget Optimization
-  turned on — Meta rejects an ad-set-level daily budget under a CBO
-  campaign. If "Duplicate" fails with a budget-related error, this is the
-  first thing to check.
-- **Template ad set ID and scaling campaign ID are raw Meta IDs**, not
-  names — find them in Ads Manager (or the URL when viewing that ad
-  set/campaign) and paste the numeric ID in, same as the ad account ID.
+- **ABO requires a non-CBO destination campaign:** every ad set this app
+  creates (revival or new-creative upload) is COST_CAP + its own ad-set-level
+  daily budget — the destination campaign must NOT have Campaign Budget
+  Optimization turned on, or Meta rejects the budget. If "Duplicate" or
+  "Create ad set" fails with a budget-related error, this is the first thing
+  to check.
+- **Template ad set ID, scaling campaign ID, and the "Upload new creative"
+  campaign ID are raw Meta IDs**, not names — find them in Ads Manager (or
+  the URL when viewing that ad set/campaign) and paste the numeric ID in,
+  same as the ad account ID.
+- **Video upload is unverified against a live Meta account.** It's built to
+  Meta's documented resumable-upload protocol (start/transfer/finish phases,
+  chunked from the browser to work around serverless request-size limits),
+  but this environment has no live Meta credentials or network access to
+  test it end-to-end — if it doesn't work first try, the chunking/offset
+  handling in `metaMarketingApi.js`'s `transferVideoChunk`/`startVideoUpload`
+  is the most likely place to debug. Image upload (the base64 `bytes`
+  shortcut) is simpler and was verified with a real file through the actual
+  upload UI.
+- **Image size:** uploaded as base64, which inflates size ~33% — very large
+  image files may fail if the encoded size exceeds the platform's request
+  limit. Compress before uploading if that happens.
