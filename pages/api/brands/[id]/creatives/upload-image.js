@@ -4,7 +4,7 @@
 
 import { getBrand } from '../../../../../lib/brandsStore';
 import { uploadImage } from '../../../../../lib/metaMarketingApi';
-import { withAuth } from '../../../../../lib/requireAuth';
+import { withAuthOrApiKey } from '../../../../../lib/requireAuth';
 
 export const config = { api: { bodyParser: { sizeLimit: '8mb' } } };
 
@@ -28,4 +28,4 @@ async function handler(req, res) {
   }
 }
 
-export default withAuth(handler);
+export default withAuthOrApiKey(handler);

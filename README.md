@@ -60,6 +60,7 @@ That's the entire feature set right now.
    | `NEXT_PUBLIC_BASE_URL` | your deployed URL, e.g. `https://prettysbrands-ads.vercel.app` |
    | `ADMIN_PASSWORD` | password for this app — there's no per-user login, just one shared operator password |
    | `META_APP_ID` / `META_APP_SECRET` | from a Meta app with the Marketing API product added — see "Facebook app setup" below |
+   | `DRAFTS_API_KEY` | *(optional)* lets an external caller (a script, a Shortcut, an agent) save "new creative" drafts without a browser session — see "Filling in drafts from outside the browser" below |
 
 4. Visit `/api/meta-auth/connect` once to authorize Facebook Ads.
 5. Sign in at `/login`, add a brand from the dashboard (name + ad account
@@ -82,6 +83,26 @@ That's the entire feature set right now.
 The connection lasts about 60 days (Meta's long-lived token limit) and can't
 silently refresh like an OAuth refresh token — the dashboard shows the
 expiry so you can re-authorize via `/api/meta-auth/connect` before it lapses.
+
+## Filling in drafts from outside the browser
+
+The whole point of the draft → review → publish flow (see "Upload new
+creative" above) is that filling in a draft and actually going live with it
+are two separate steps — so *filling in* a draft doesn't have to happen
+through this app's own browser form. Setting `DRAFTS_API_KEY` lets any
+caller that can send an HTTP request — a script, an iOS Shortcut, an agent
+you hand photos and copy to — authenticate with `Authorization: Bearer
+<DRAFTS_API_KEY>` instead of a login session, against exactly three
+endpoints:
+
+- `GET /api/brands` / `POST /api/brands` — list or create brands
+- `POST /api/brands/[id]/creatives/upload-image` and the `.../video/{start,transfer,finish}` trio — upload an asset
+- `POST /api/brands/[id]/creatives/create` — save a draft from that asset + copy versions
+
+Publishing (`.../creatives/publish`), brand settings, and deletion all stay
+session-only on purpose — no caller holding just the API key can make
+anything go live or change how the app is configured. You still review and
+publish every draft yourself, from the browser, whenever you're ready.
 
 ## Run locally
 

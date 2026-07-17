@@ -1,5 +1,5 @@
 import { listBrands, createBrand } from '../../../lib/brandsStore';
-import { withAuth } from '../../../lib/requireAuth';
+import { withAuthOrApiKey } from '../../../lib/requireAuth';
 
 async function handler(req, res) {
   if (req.method === 'GET') {
@@ -24,4 +24,4 @@ async function handler(req, res) {
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-export default withAuth(handler);
+export default withAuthOrApiKey(handler);

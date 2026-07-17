@@ -6,7 +6,7 @@
 
 import { getBrand } from '../../../../../../lib/brandsStore';
 import { transferVideoChunk } from '../../../../../../lib/metaMarketingApi';
-import { withAuth } from '../../../../../../lib/requireAuth';
+import { withAuthOrApiKey } from '../../../../../../lib/requireAuth';
 
 export const config = { api: { bodyParser: false } };
 
@@ -43,4 +43,4 @@ async function handler(req, res) {
   }
 }
 
-export default withAuth(handler);
+export default withAuthOrApiKey(handler);

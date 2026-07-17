@@ -1,6 +1,6 @@
 import { getBrand } from '../../../../../../lib/brandsStore';
 import { finishVideoUpload, getVideoThumbnail } from '../../../../../../lib/metaMarketingApi';
-import { withAuth } from '../../../../../../lib/requireAuth';
+import { withAuthOrApiKey } from '../../../../../../lib/requireAuth';
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -25,4 +25,4 @@ async function handler(req, res) {
   }
 }
 
-export default withAuth(handler);
+export default withAuthOrApiKey(handler);
