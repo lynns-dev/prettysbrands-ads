@@ -1,11 +1,11 @@
-// Builds the new ad set + one ad creative/ad per copy version from an
-// already-uploaded asset (an image_hash, or a video_id + thumbnail_url).
-// Applies immediately — this is the deliberate final step after uploading
-// an asset and filling in the copy versions, not a preview.
+// Saves a draft from an already-uploaded asset (an image_hash, or a
+// video_id + optional thumbnail_url — video processing may not be done
+// yet, and that's fine at draft time) plus the campaign/budget/copy
+// details. Nothing touches the ad account here — see publish.js for the
+// step that actually creates the ad set/creatives/ads.
 
 import { getBrand } from '../../../../../lib/brandsStore';
-import { createAdSetWithCopyVersions } from '../../../../../lib/creativeUpload';
-import { getVideoThumbnail } from '../../../../../lib/metaMarketingApi';
+import { createDraft } from '../../../../../lib/creativeDraftStore';
 import { withAuth } from '../../../../../lib/requireAuth';
 
 async function handler(req, res) {
@@ -25,35 +25,32 @@ async function handler(req, res) {
   if (!campaignId || !costCapCents || !dailyBudgetCents || !link) {
     return res.status(400).json({ error: 'campaignId, costCapCents, dailyBudgetCents, and link are required.' });
   }
+  if (!copyVersions || copyVersions.length === 0) {
+    return res.status(400).json({ error: 'At least one headline/body copy version is required.' });
+  }
 
   let asset;
   if (assetType === 'video') {
     if (!videoId) return res.status(400).json({ error: 'videoId is required for video assets.' });
-    let finalThumbnailUrl = thumbnailUrl;
-    if (!finalThumbnailUrl) {
-      finalThumbnailUrl = await getVideoThumbnail(videoId, { attempts: 2, delayMs: 1500 });
-    }
-    if (!finalThumbnailUrl) {
-      return res.status(409).json({ error: "Video is still processing on Meta's side — wait a few seconds and try creating the ad set again (no need to re-upload)." });
-    }
-    asset = { videoId, thumbnailUrl: finalThumbnailUrl };
+    asset = { videoId, thumbnailUrl: thumbnailUrl || null };
   } else {
     if (!imageHash) return res.status(400).json({ error: 'imageHash is required for image assets.' });
     asset = { imageHash };
   }
 
   try {
-    const result = await createAdSetWithCopyVersions(brand, {
+    const draft = await createDraft(brand.id, {
       adSetName: adSetName || 'New Creative',
       campaignId,
       costCapCents: Number(costCapCents),
       dailyBudgetCents: Number(dailyBudgetCents),
       link,
       ctaType: ctaType || 'SHOP_NOW',
+      assetType: assetType === 'video' ? 'video' : 'image',
       asset,
       copyVersions,
     });
-    return res.status(200).json(result);
+    return res.status(200).json({ draft });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }

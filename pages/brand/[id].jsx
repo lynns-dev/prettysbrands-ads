@@ -44,6 +44,9 @@ export default function BrandDetail() {
   const [creatingAdSet, setCreatingAdSet] = React.useState(false);
   const [createError, setCreateError] = React.useState('');
   const [createResult, setCreateResult] = React.useState(null);
+  const [publishingId, setPublishingId] = React.useState(null);
+  const [publishMessages, setPublishMessages] = React.useState({});
+  const [discardingId, setDiscardingId] = React.useState(null);
 
   const load = React.useCallback(() => {
     if (!id) return;
@@ -230,11 +233,12 @@ export default function BrandDetail() {
       });
       const result = await res.json();
       if (!res.ok) {
-        setCreateError(result.error || 'Failed to create ad set.');
+        setCreateError(result.error || 'Failed to save draft.');
       } else {
-        setCreateResult(result);
+        setCreateResult(result.draft);
         setFile(null);
         setAsset(null);
+        setUploadForm({ adSetName: '', campaignId: '', costCapCents: '', dailyBudgetCents: '', link: '', ctaType: 'SHOP_NOW' });
         setCopyVersions([{ headline: '', body: '' }]);
       }
     } finally {
@@ -243,11 +247,41 @@ export default function BrandDetail() {
     }
   };
 
+  const handlePublishDraft = async (draft) => {
+    if (!confirm(`Publish "${draft.adSetName}"? This creates the ad set and ${draft.copyVersions.length} ad${draft.copyVersions.length === 1 ? '' : 's'} on Facebook right now.`)) return;
+    setPublishingId(draft.id);
+    setPublishMessages((prev) => ({ ...prev, [draft.id]: '' }));
+    try {
+      const res = await fetch(`/api/brands/${id}/creatives/publish`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draftId: draft.id }),
+      });
+      const result = await res.json();
+      setPublishMessages((prev) => ({
+        ...prev,
+        [draft.id]: res.ok ? `Published: new ad set ${result.result.newAdSetId}.` : (result.error || 'Publish failed.'),
+      }));
+    } finally {
+      setPublishingId(null);
+      load();
+    }
+  };
+
+  const handleDiscardDraft = async (draft) => {
+    if (!confirm(`Discard the draft "${draft.adSetName}"? This can't be undone.`)) return;
+    setDiscardingId(draft.id);
+    try {
+      await fetch(`/api/brands/${id}/creatives/drafts/${draft.id}`, { method: 'DELETE' });
+    } finally {
+      setDiscardingId(null);
+      load();
+    }
+  };
+
   if (loading || !data) {
     return <div style={{ maxWidth: 800, margin: '0 auto', padding: 32 }}><p style={{ color: T.soft }}>Loading…</p></div>;
   }
 
-  const { brand, connection, todayPerformance, recentRevivals, recentNewCreatives, error } = data;
+  const { brand, connection, todayPerformance, recentRevivals, recentNewCreatives, drafts, error } = data;
   const revivalConfigured = brand.templateAdSetId && brand.scalingCampaignId && brand.costCapCents && brand.aboDailyBudgetCents;
   const uploadConfigured = brand.pageId && brand.pixelId;
   const canCreateAdSet = asset && uploadForm.campaignId && uploadForm.costCapCents && uploadForm.dailyBudgetCents && uploadForm.link && copyVersions.every((v) => v.headline.trim() && v.body.trim());
@@ -389,7 +423,7 @@ export default function BrandDetail() {
       <div style={{ ...S.card, marginTop: 20 }}>
         <p style={{ ...S.label, marginBottom: 12 }}>Upload new creative</p>
         <p style={{ color: T.soft, fontSize: 13, marginBottom: 12 }}>
-          Every version below reuses the same uploaded image/video — only the headline and body copy differ, each becoming its own ad in one new ad set. Targeting is fixed for now: United States, automatic placements, optimized for purchases via the brand's pixel.
+          Every version below reuses the same uploaded image/video — only the headline and body copy differ, each becoming its own ad in one new ad set. Targeting is fixed for now: United States, automatic placements, optimized for purchases via the brand's pixel. Saving here only creates a draft — nothing goes live on Facebook until you review it below and click Publish.
         </p>
         {!uploadConfigured && (
           <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>Set a Facebook Page ID and Pixel ID in Edit settings first.</p>
@@ -443,21 +477,48 @@ export default function BrandDetail() {
 
           {createError && <p style={{ color: T.warn, fontSize: 13, marginBottom: 12 }}>{createError}</p>}
           <button type="submit" disabled={!canCreateAdSet || creatingAdSet} style={{ ...S.btnFill, opacity: (!canCreateAdSet || creatingAdSet) ? 0.6 : 1 }}>
-            {creatingAdSet ? 'Creating…' : 'Create ad set →'}
+            {creatingAdSet ? 'Saving…' : 'Save as draft →'}
           </button>
         </form>
 
         {createResult && (
           <div style={{ ...S.card, background: T.bg, marginTop: 16 }}>
-            <p style={{ fontSize: 13, marginBottom: 8 }}>
-              New ad set <strong>{createResult.newAdSetId}</strong>: {createResult.adsCreated} ad{createResult.adsCreated === 1 ? '' : 's'} created{createResult.adsFailed > 0 ? `, ${createResult.adsFailed} failed` : ''}.
+            <p style={{ fontSize: 13 }}>
+              Saved as a draft — review it below and publish when you're ready. Nothing has been created on Facebook yet.
             </p>
-            {createResult.errors?.length > 0 && (
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: T.warn }}>
-                {createResult.errors.map((e, i) => <li key={i}>{e.headline}: {e.reason}</li>)}
-              </ul>
-            )}
           </div>
+        )}
+
+        {drafts?.length > 0 && (
+          <>
+            <p style={{ ...S.label, margin: '20px 0 10px' }}>Drafts pending review ({drafts.length})</p>
+            {drafts.map((d) => (
+              <div key={d.id} style={{ ...S.card, background: T.bg, marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{d.adSetName}</span>
+                    {d.status === 'failed' && <span style={{ marginLeft: 8 }}><span style={badge(T.warn)}>Failed</span></span>}
+                    <div style={{ fontSize: 12, color: T.soft, marginTop: 2 }}>
+                      {d.assetType === 'video' ? 'Video' : 'Image'} · Campaign {d.campaignId} · {money(d.costCapCents)} cost cap · {money(d.dailyBudgetCents)}/day
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => handlePublishDraft(d)} disabled={publishingId === d.id || discardingId === d.id} style={{ ...S.btnOutline, height: 32, padding: '0 14px', fontSize: 12, opacity: (publishingId === d.id) ? 0.6 : 1 }}>
+                      {publishingId === d.id ? 'Publishing…' : 'Publish →'}
+                    </button>
+                    <button onClick={() => handleDiscardDraft(d)} disabled={publishingId === d.id || discardingId === d.id} style={{ ...S.btnOutline, height: 32, padding: '0 14px', fontSize: 12, color: T.warn, borderColor: T.warn, opacity: (discardingId === d.id) ? 0.6 : 1 }}>
+                      {discardingId === d.id ? 'Discarding…' : 'Discard'}
+                    </button>
+                  </div>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: T.soft }}>
+                  {d.copyVersions.map((v, i) => <li key={i}><strong style={{ color: T.ink }}>{v.headline}</strong> — {v.body}</li>)}
+                </ul>
+                {d.status === 'failed' && d.error && <p style={{ color: T.warn, fontSize: 12, marginTop: 8 }}>{d.error}</p>}
+                {publishMessages[d.id] && <p style={{ fontSize: 12, color: T.soft, marginTop: 8 }}>{publishMessages[d.id]}</p>}
+              </div>
+            ))}
+          </>
         )}
 
         {recentNewCreatives?.length > 0 && (

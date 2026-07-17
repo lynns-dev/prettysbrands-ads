@@ -8,6 +8,7 @@ import { getBrand } from '../../../../lib/brandsStore';
 import { getTodayPerformance } from '../../../../lib/todayPerformance';
 import { getRevivalLog } from '../../../../lib/creativeRevivalStore';
 import { getNewCreativeLog } from '../../../../lib/newCreativeStore';
+import { listDrafts } from '../../../../lib/creativeDraftStore';
 import { getConnectionStatus } from '../../../../lib/metaAdsAuth';
 import { withAuth } from '../../../../lib/requireAuth';
 
@@ -23,12 +24,14 @@ async function handler(req, res) {
   const connection = await getConnectionStatus().catch(() => ({ connected: false }));
   const recentRevivals = await getRevivalLog(brand.id, 20);
   const recentNewCreatives = await getNewCreativeLog(brand.id, 20);
-  const empty = { brand, connection, todayPerformance: [], recentRevivals, recentNewCreatives, error: null };
+  const allDrafts = await listDrafts(brand.id);
+  const drafts = allDrafts.filter((d) => d.status !== 'published');
+  const empty = { brand, connection, todayPerformance: [], recentRevivals, recentNewCreatives, drafts, error: null };
   if (!connection.connected) return res.status(200).json(empty);
 
   try {
     const todayPerformance = await getTodayPerformance(brand);
-    return res.status(200).json({ brand, connection, todayPerformance, recentRevivals, recentNewCreatives, error: null });
+    return res.status(200).json({ brand, connection, todayPerformance, recentRevivals, recentNewCreatives, drafts, error: null });
   } catch (err) {
     return res.status(200).json({ ...empty, error: err.message });
   }

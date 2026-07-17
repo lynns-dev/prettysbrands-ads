@@ -31,12 +31,18 @@ time on a small, well-understood base rather than all at once.
   creates a new ad there reusing the winning creative. Manual, reviewed
   action — nothing is created until you click "Duplicate" on a specific
   candidate.
-- **Upload new creative.** Upload an image or video, then create one or
-  more headline/body copy versions against that same asset — each version
-  becomes its own ad inside one brand-new ad set, in a campaign you pick, at
-  a cost cap and daily budget you pick. Targeting is fixed for now: United
-  States, automatic (Advantage+) placements, optimized for purchases via the
-  brand's pixel. No other targeting controls exist yet.
+- **Upload new creative (draft → review → publish).** Upload an image or
+  video, then create one or more headline/body copy versions against that
+  same asset — each version becomes its own ad inside one brand-new ad set,
+  in a campaign you pick, at a cost cap and daily budget you pick. Saving
+  only creates a draft — nothing touches the ad account yet. A "Drafts
+  pending review" list shows every draft (asset type, campaign, budget, all
+  copy versions) with **Publish** (actually creates the ad set + ads on
+  Facebook) and **Discard** buttons, so filling in a creative and going live
+  with it are two separate, deliberate steps. A failed publish attempt marks
+  the draft `failed` with the error and leaves it in the list to retry — it
+  isn't lost. Targeting is fixed for now: United States, automatic
+  (Advantage+) placements, optimized for purchases via the brand's pixel.
 
 That's the entire feature set right now.
 
@@ -95,8 +101,10 @@ npm run dev
 - `lib/metaMarketingApi.js` — Meta Marketing API client: active ad sets, all ads (any status), Insights (spend/revenue/purchases) at ad-set or ad level, ad-set copy (into a different campaign), COST_CAP + ABO budget update, ad creation from an existing creative
 - `lib/todayPerformance.js` — today's spend/ROAS/CPA per active ad set, sorted by spend
 - `lib/creativeRevival.js` — finds past-winning ads that aren't live now and duplicates one into a fresh ad set; `lib/creativeRevivalStore.js` is its per-brand audit log
-- `lib/creativeUpload.js` — builds a new ad set + one ad creative/ad per copy version from an uploaded asset; `lib/newCreativeStore.js` is its per-brand audit log
-- `pages/api/brands/[id]/creatives/upload-image.js`, `.../video/{start,transfer,finish}.js`, `.../create.js` — asset upload (single-request for images, Meta's resumable protocol relayed in chunks for video) and ad set/creative/ad creation
+- `lib/creativeUpload.js` — builds a new ad set + one ad creative/ad per copy version from an uploaded asset; `lib/newCreativeStore.js` is its per-brand audit log of *published* runs
+- `lib/creativeDraftStore.js` — pending "new creative" drafts (status: draft/failed/published) per brand, created by `.../creatives/create.js` and turned into real ad sets/ads by `.../creatives/publish.js`
+- `pages/api/brands/[id]/creatives/upload-image.js`, `.../video/{start,transfer,finish}.js` — asset upload (single-request for images, Meta's resumable protocol relayed in chunks for video)
+- `pages/api/brands/[id]/creatives/create.js` (save draft), `.../publish.js` (actually create the ad set/ads on Facebook), `.../drafts/[draftId].js` (discard)
 - `lib/brandsStore.js` — KV-backed brand configs (name, ad account ID, creative-revival thresholds/destination, Facebook Page ID, Pixel ID)
 - `lib/metaAdsTokenStore.js`, `lib/metaAdsAuth.js` — the shared Meta OAuth token
 - `lib/adminAuth.js`, `lib/kv.js` — session handling and the shared Redis (ioredis) helper
